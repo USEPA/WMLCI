@@ -1,0 +1,25 @@
+git+https://github.com/USEPA/esupy.git#egg=esupy
+pip>=23.3     # must specify when using pip installs
+numpy<2      # <2.0 required by BW2 pkgs as of Apr. 2025
+pandas
+requests
+scipy
+stats_arrays==0.7
+seaborn
+
+# BW2 pkgs
+git+https://github.com/brightway-lca/brightway25@1.1.1
+bw2analyzer==0.11.7
+bw2calc==2.0.2
+bw2data==4.4.4
+https://github.com/maqchristie/brightway2-io.git@develop#egg=bw2io  # forked branch of bw2io
+bw2parameters==1.1.0
+bw_migrations==0.2
+bw_processing==1.0
+git+https://github.com/brightway-lca/bw_simapro_csv@0.4
+ecoinvent_interface==3.1
+matrix_utils==0.6
+mrio_common_metadata==0.2.1
+git+https://github.com/brightway-lca/multifunctional@1.0
+randonneur==0.6.1
+randonneur_data==0.5.5  # expect 0.6 to hit conda channels soon
