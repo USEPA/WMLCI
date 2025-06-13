@@ -5,6 +5,7 @@ documentation
 https://docs.brightway.dev/en/latest/content/api/bw2io/importers/json_ld_lcia/index.html#bw2io.importers.json_ld_lcia.JSONLDLCIAImporter
 
 """
+import zipfile
 
 from wmlci.settings import datapath
 from wmlci.common import append_jsonld_location
@@ -13,6 +14,19 @@ from bw2io.importers.json_ld import JSONLDImporter
 import bw2io as bi
 import bw2data as bd
 # import bw2calc as bc
+
+
+# define path to warm data
+warmdata = datapath / "warm_v16_openlca_database_2025-06-13"
+
+### Note - temporary work-around until move data to EPA Data Commons ###
+# first unzip the warm openLCA data, if not already unzipped locally
+if not warmdata.exists():
+    # if not, unzip
+    with zipfile.ZipFile(f"{warmdata}.zip", 'r') as zip_ref:
+        zip_ref.extractall(warmdata)
+    print("Unzipped WARM openLCA data")
+
 
 
 # initiate project
