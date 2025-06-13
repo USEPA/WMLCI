@@ -11,3 +11,7 @@ datapath = MODULEPATH / 'data'
 paths = Paths()
 paths.local_path = paths.local_path / 'wmlci'
 outputpath = paths.local_path
+externalData = outputpath / 'externalData'
+
+# ensure directories exist
+mkdir_if_missing(externalData)
