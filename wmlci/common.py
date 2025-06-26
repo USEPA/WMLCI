@@ -1,8 +1,9 @@
 """
 Functions common across datasets
 """
-
-## Methods for locating and understanding errors which occur when calling .apply_strategies() on JSONLDImporter objects ##
+########################################################################################################################
+## Methods for locating and understanding errors which occur when calling .apply_strategies() on JSONLDImporter objects
+########################################################################################################################
 
 def find_missing_unit_group_id(ug_id, jsonld):
     """
@@ -79,8 +80,112 @@ def find_location_issues(jsonld):
             print("-" * 60)
     return "\n✅ Search for location issues is complete."
 
+def find_faulty_allocation_factors(jsonld):
+    """
+    Identify processes with allocationFactors missing 'exchange', 'product', or both,
+    and print detailed information about the issues, including the index of the faulty factor.
 
-## Methods for fixing errors which occur when calling .apply_strategies() on JSONLDImporter objects ##
+    Parameters
+    ----------
+    jsonld : JSONLDImporter
+        A JSONLDImporter object containing process data.
+
+    Returns
+    -------
+    list of dict
+        A list of dictionaries with 'process_id', 'allocation_type', 'missing_components',
+        and 'factor_index' keys.
+    """
+    faulty_processes = []
+
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        if process.get("type") in {"emission", "product"}:
+            continue
+
+        for idx, factor in enumerate(process.get("allocationFactors", [])):
+            allocation_type = factor.get("allocationType", "UNKNOWN_ALLOCATION")
+            missing = []
+
+            if "product" not in factor:
+                missing.append("product")
+            if allocation_type == "CAUSAL_ALLOCATION" and "exchange" not in factor:
+                missing.append("exchange")
+
+                faulty_processes.append({
+                    "process_id": process_id,
+                    "allocation_type": allocation_type,
+                    "missing_components": missing,
+                    "factor_index": idx
+                })
+
+    print("📋 Summary of faulty processes:")
+    for entry in faulty_processes:
+        print(
+            f"- Process ID: {entry['process_id']}, "
+            f"Allocation Type: {entry['allocation_type']}, "
+            f"Missing: {', '.join(entry['missing_components'])}, "
+            f"Factor Index: {entry['factor_index']}"
+        )
+
+    return faulty_processes
+
+def find_unallocatable_processes(jsonld):
+    """
+    Identify and print processes in a JSONLDImporter object that require allocation
+    but lack allocation factors for their default allocation method.
+
+    Parameters
+    ----------
+    jsonld : JSONLDImporter
+        A JSONLDImporter object containing process data.
+
+    Returns
+    -------
+    None
+        Prints UUIDs and details of problematic processes to the console.
+    """
+    from collections import defaultdict
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        # Skip if not allocatable
+        if process.get("@type") in ("product", "emission"):
+            continue
+        if not process.get("allocationFactors"):
+            continue
+        allocation_dict = defaultdict(dict)
+        try:
+            for factor in process["allocationFactors"]:
+                allocation_type = factor.get("allocationType")
+                if allocation_type == "CAUSAL_ALLOCATION":
+                    try:
+                        product = factor["product"]["@id"]
+                        flow = factor["exchange"]["flow"]["@id"]
+                    except KeyError:
+                        print(f"Skipping malformed CAUSAL_ALLOCATION in process {process_id}")
+                        continue
+                    if product not in allocation_dict["CAUSAL_ALLOCATION"]:
+                        allocation_dict["CAUSAL_ALLOCATION"][product] = {}
+                    allocation_dict["CAUSAL_ALLOCATION"][product][flow] = factor["value"]
+                else:
+                    product = factor.get("product", {}).get("@id")
+                    if product:
+                        allocation_dict[allocation_type][product] = factor["value"]
+        except Exception as e:
+            print(f"Error processing allocation factors in process {process_id}: {e}")
+            continue
+        default_method = process.get("defaultAllocationMethod")
+        if default_method and default_method not in allocation_dict:
+            print(f"❌ Unallocatable process: {process_id}")
+            print(f"   Name: {process.get('name', 'Unnamed')}")
+            print(f"   Default method: {default_method}")
+            print(f"   Available methods: {list(allocation_dict.keys())}")
+            print("-" * 60)
+
+
+
+
+########################################################################################################################
+## Methods for fixing errors which occur when calling .apply_strategies() on JSONLDImporter objects
+########################################################################################################################
 
 def correct_jsonld_input_key(jsonld):
     '''
@@ -168,3 +273,6 @@ def append_jsonld_location(jsonld):
                 "name": "Global"
             }
     return jsonld
+
+
+
