@@ -271,7 +271,7 @@ def append_jsonld_location(jsonld):
     return jsonld
 
 ########################################################################################################################
-## Methods for fixing errors occuring when trying to write unlinked edges to excel
+## Methods for working with unlinked edges
 ########################################################################################################################
 
 def clean_all_locations(jsonld):
@@ -334,6 +334,86 @@ def clean_all_locations(jsonld):
         clean_entry(product, "PRODUCT")
 
     print(f"✅ Total entries fixed: {count_fixed}")
+
+def write_unlinked_flows_to_excel(importer, output_directory):
+    import os
+    import pandas as pd
+    from collections import defaultdict
+
+    # Prepare containers
+    unique_unlinked_set = set()
+    unique_unlinked_data = []
+    process_with_unlinked = []
+    unique_process_set = set()
+    unique_process_data = []
+
+    for ds in importer.data:
+        ds_type = ds.get("type")
+        ds_code = ds.get("code", "No code")
+        ds_name = ds.get("name", "No name")
+
+        # Clean process code
+        if '.' in ds_code:
+            ds_code = ds_code.split('.')[0]
+
+        has_unlinked = False
+
+        for exc in ds.get("exchanges", []):
+            # Apply Brightway's unlinked logic
+            if not exc.get("input") and not (ds_type == "multifunctional" and exc.get("functional")):
+                exc_type = exc.get("type", "unknown")
+                exc_code = exc.get("code", "No code")
+                exc_name = exc.get("name", "No name")
+
+                # Clean exchange code
+                if '.' in exc_code:
+                    exc_code = exc_code.split('.')[0]
+
+                # Track unique unlinked exchanges
+                key = (exc_type, exc_code, exc_name)
+                if key not in unique_unlinked_set:
+                    unique_unlinked_set.add(key)
+                    unique_unlinked_data.append({
+                        "type": exc_type,
+                        "code": exc_code,
+                        "name": exc_name
+                    })
+
+                # Track process with unlinked exchange
+                process_with_unlinked.append({
+                    "process_code": ds_code,
+                    "process_name": ds_name,
+                    "unlinked_exchange_code": exc_code
+                })
+
+                has_unlinked = True
+
+        # Track unique processes with unlinked exchanges
+        if has_unlinked and ds_code not in unique_process_set:
+            unique_process_set.add(ds_code)
+            unique_process_data.append({
+                "code": ds_code,
+                "name": ds_name
+            })
+
+    # Create DataFrames
+    df_unique_unlinked = pd.DataFrame(unique_unlinked_data)
+    df_process_with_unlinked = pd.DataFrame(process_with_unlinked)
+    df_unique_process_unlinked = pd.DataFrame(unique_process_data)
+
+    # Write to Excel
+    output_path = os.path.join(output_directory, "unlinked_flows.xlsx")
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        df_unique_unlinked.to_excel(writer, sheet_name="unique_unlinked_exc", index=False)
+        df_process_with_unlinked.to_excel(writer, sheet_name="process_with_unlinked", index=False)
+        df_unique_process_unlinked.to_excel(writer, sheet_name="unique_process_unlinked", index=False)
+
+    print(f"Excel file saved to: {output_path}")
+
+
+
+
+
 
 
 

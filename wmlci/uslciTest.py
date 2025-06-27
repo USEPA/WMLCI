@@ -99,7 +99,7 @@ uslci = apply_opposite_direction_approach(uslci)
 uslci = append_jsonld_location(uslci)
 
 
-## Apply strategies and Linkages ##
+## Apply strategies and evaluate linkages ##
 # Standard JSON-LD strategies
 uslci.apply_strategies()
 uslci.merge_biosphere_flows()
@@ -110,11 +110,14 @@ uslci.apply_strategy(special.add_dummy_processes_and_rename_exchanges)
 # Check degree of linkage within model graph
 uslci.statistics()
 
-# Print unlinked contents
-uslci.write_excel(only_unlinked=True)
-find_dict_locations(uslci)
-clean_locations_to_print(uslci)
+# Print ids for unlinked flows
+path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway'
+write_unlinked_flows_to_excel(uslci, path)
+
+# Print unlinked contents #
+# Run clean_all_locations before trying to write excel
 clean_all_locations(uslci)
+uslci.write_excel(only_unlinked=True)
 
 
 ## Import LCIA Methods
