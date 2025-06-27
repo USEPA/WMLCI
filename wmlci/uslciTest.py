@@ -7,8 +7,7 @@ from bw2io.importers.json_ld import JSONLDImporter
 from wmlci.settings import datapath
 from bw2io.strategies import *
 
-from wmlci.common import correct_jsonld_input_key, edit_non_quant_ref_flow_type, apply_opposite_direction_approach, \
-    append_jsonld_location, find_faulty_allocation_factors
+from wmlci.common import *
 
 ## Project Initiation ##
 
@@ -65,8 +64,7 @@ from wmlci.settings import datapath
 from bw2io.strategies import *
 from bw2io.strategies.special import *
 
-from wmlci.common import correct_jsonld_input_key, edit_non_quant_ref_flow_type, apply_opposite_direction_approach, \
-    append_jsonld_location, find_faulty_allocation_factors, find_unallocatable_processes
+from wmlci.common import *
 
 ## Project Initiation ##
 
@@ -114,7 +112,9 @@ uslci.statistics()
 
 # Print unlinked contents
 uslci.write_excel(only_unlinked=True)
-uslci = uslci.str
+find_dict_locations(uslci)
+clean_locations_to_print(uslci)
+clean_all_locations(uslci)
 
 
 ## Import LCIA Methods

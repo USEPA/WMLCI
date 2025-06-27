@@ -82,19 +82,16 @@ def find_location_issues(jsonld):
 
 def find_faulty_allocation_factors(jsonld):
     """
-    Identify processes with allocationFactors missing 'exchange', 'product', or both,
-    and print detailed information about the issues, including the index of the faulty factor.
+    used to solve: "We currently only support exchange-specific CAUSAL_ALLOCATION"
 
-    Parameters
-    ----------
-    jsonld : JSONLDImporter
-        A JSONLDImporter object containing process data.
+    search for processes with allocationFactors that are missing  'exchange', 'product', or both
+    print the process uuid and other useful information
 
-    Returns
-    -------
-    list of dict
-        A list of dictionaries with 'process_id', 'allocation_type', 'missing_components',
-        and 'factor_index' keys.
+    deleting entries in allocationFactors which has the allocation type of 'CAUSAL_ALLOCATION' but no exchange attribute
+    will solve this problem.
+
+    :param jsonld:
+    :return:
     """
     faulty_processes = []
 
@@ -131,18 +128,17 @@ def find_faulty_allocation_factors(jsonld):
 
 def find_unallocatable_processes(jsonld):
     """
+    used to solve: "Default allocation chosen, but allocation factors for this method not provided"
+
     Identify and print processes in a JSONLDImporter object that require allocation
-    but lack allocation factors for their default allocation method.
+    but lack allocation factors for their default allocation method. This also occurs when the default allocation is set
+    to 'NO_ALLOCATION" but allocation is required.
 
-    Parameters
-    ----------
-    jsonld : JSONLDImporter
-        A JSONLDImporter object containing process data.
+    changing the default allocation to an allocation type which match allocation factors included in attribute
+    'allocationFactors'.
 
-    Returns
-    -------
-    None
-        Prints UUIDs and details of problematic processes to the console.
+    :param jsonld:
+    :return:
     """
     from collections import defaultdict
     for process_id, process in jsonld.data.get("processes", {}).items():
@@ -273,6 +269,73 @@ def append_jsonld_location(jsonld):
                 "name": "Global"
             }
     return jsonld
+
+########################################################################################################################
+## Methods for fixing errors occuring when trying to write unlinked edges to excel
+########################################################################################################################
+
+def clean_all_locations(jsonld):
+    """
+    Clean and standardize 'location' fields in a JSONLDImporter object.
+
+    This function addresses a specific issue encountered when exporting data to Excel
+    using the `xlsxwriter` library, where a `TypeError: unhashable type: 'dict'` occurs.
+    The root cause of this error is that some entries in the dataset contain a 'location'
+    field that is either:
+        - A dictionary (which is unhashable and cannot be used in Excel shared string tables),
+        - `None`, or
+        - Missing entirely.
+
+    These invalid 'location' values are passed to `sheet.write_string()` in the
+    `write_lci_matching()` function, which expects a string. When a non-string value
+    (dict or NoneType) is passed, `xlsxwriter` fails when trying to store it in its
+    internal shared string table.
+
+    This function resolves the issue by:
+        - Iterating over all entries in `uslci.data` and `uslci.products`,
+        - Checking each dictionary for the presence and type of the 'location' field,
+        - Replacing any non-string, missing, or None 'location' values with the string
+          "no location",
+        - Recursively checking all nested 'exchanges' within each dataset entry,
+        - Logging each fix with the process ID and original value for traceability.
+
+    Parameters
+    ----------
+    uslci : JSONLDImporter
+        An instance of the JSONLDImporter class containing `.data` and `.products`
+        attributes, each of which is a list of dictionaries representing LCI data.
+
+    Returns
+    -------
+    None
+        The function modifies the `uslci` object in-place and prints a summary of
+        the changes made.
+    """
+    count_fixed = 0
+
+    def clean_entry(entry, context=""):
+        nonlocal count_fixed
+        location = entry.get("location")
+        if location is None or not isinstance(location, str):
+            process_id = entry.get("id") or entry.get("code") or "(unknown ID)"
+            print(f"[{context}] FIXING Process ID: {process_id}")
+            print(f"Original location type: {type(location).__name__}")
+            print(f"Original location content: {location}")
+            print("-" * 40)
+            entry["location"] = "no location"
+            count_fixed += 1
+
+    for entry in jsonld.data:
+        clean_entry(entry, "DATA")
+        for exc in entry.get("exchanges", []):
+            clean_entry(exc, "EXCHANGE")
+
+    for product in jsonld.products:
+        clean_entry(product, "PRODUCT")
+
+    print(f"✅ Total entries fixed: {count_fixed}")
+
+
 
 
 
