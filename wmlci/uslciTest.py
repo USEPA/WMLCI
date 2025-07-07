@@ -60,6 +60,7 @@ uslci_crudeOil.statistics()
 ############################################################################
 
 ## Dependencies ##
+
 from bw2calc import LCA, LeastSquaresLCA
 
 import bw2data as bd
@@ -99,13 +100,14 @@ uslci = append_jsonld_location(uslci) # add default 'Global' location when proce
 uslci.apply_strategies()
 uslci.apply_strategy(special.add_dummy_processes_and_rename_exchanges) # See In [8]: https://github.com/brightway-lca/brightway25/blob/main/notebooks/IO%20-%20Importing%20the%20US%20LCI%20database.ipynb
 uslci.statistics()
-uslci.write_separate_biosphere_database()
+#uslci.write_separate_biosphere_database()
+uslci.merge_biosphere_flows()
 uslci.drop_unlinked(i_am_reckless=True) # temporary to be able to write database; more work required for linking flows
 uslci.write_database()
 
 # Fix missing location attributes or nonetype values
 # This must be done to write unlinked flows to spreadsheet
-# clean_all_locations(uslci)
+clean_all_locations(uslci)
 # call function write_unlinked_flows_to_excel(uslci, outputPath)
 
 
@@ -117,10 +119,11 @@ IPCC = JSONLDLCIAImporter(lciapath)
 
 # Apply strategies to LCIA, evaluate linkages, match biosphere flows to characterization factors
 IPCC.apply_strategies()
-IPCC.match_biosphere_by_id('uslci biosphere')
+IPCC.match_biosphere_by_id('uslci')
 IPCC.statistics()
 IPCC.drop_unlinked()
-IPCC.write_methods()
+IPCC.write_methods() # uncomment if running for the first time
+
 
 '''
 # Export IPCC.data to a json file after running apply_strategies()
@@ -141,32 +144,32 @@ with open(path, 'w', encoding='utf-8') as f:
 USLCI = bd.Database('uslci')
 
 # Get activity
-activity = [act for act in USLCI if "crude oil, production mixture, at extraction" in act["name"].lower()] # use lower case
+# Inspect contents and select the activity (i.e. process not the product flow)
+activity = [act for act in USLCI if "Crude oil, production mixture, at extraction" in act["name"]] # use lower case
+activity = activity[1] # This selects the activity
+print(activity)
 
-# Not sure which of these two to use
-activity = activity[0] # This selects the activity
-#activity = activity[1] # This selects the product flow
-
-# Get the reference product from the activity
-product = [
-    exc for exc in activity.exchanges()
-    if exc["type"] == "production" and exc.get("code") == "67d71d59-8951-30d6-a5c8-2ddbe3cc92de"
-]
+# Print all exchanges
+for exc in activity.exchanges():
+   print(f"{exc['amount']} {exc['unit']} of {exc.input['name']} ({exc.input['location']}) - type: {exc['type']}")
 
 # Select LCIA methods to use for running LCA
 # Running results for all IPCC methods
-methods = list(bd.methods)[:8]
-
 # Calculate and print results for all methods
 results = []
-for method in methods:
-    lca = LeastSquaresLCA({activity: 1}, method=method) # or swap activity for product??
-    lca.lci()
-    lca.lcia()
-    results.append((method, lca.score))
+method = ('IPCC','AR6-20')
+funcUnt, data_objs, _ = bd.prepare_lca_inputs(
+    {activity: 1},
+    method=method,
+)
+print(method)
+# Non square matrix, was prompted to use LeastSquaresLCA instead of just LCA
+lca = LeastSquaresLCA(funcUnt, data_objs = data_objs) # {activity:1} is the selected process and a reference flow quant of 1 unit
+lca.lci()
+lca.lcia()
+results.append((method, lca.score))
+print(f"Method: {method}\nScore: {lca.score}\n")
 
-for method, score in results:
-    print(f"Method: {method}\nScore: {score}\n")
 
 
 

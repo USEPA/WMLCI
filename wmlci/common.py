@@ -318,10 +318,10 @@ def clean_all_locations(jsonld):
         location = entry.get("location")
         if location is None or not isinstance(location, str):
             process_id = entry.get("id") or entry.get("code") or "(unknown ID)"
-            print(f"[{context}] FIXING Process ID: {process_id}")
-            print(f"Original location type: {type(location).__name__}")
-            print(f"Original location content: {location}")
-            print("-" * 40)
+            #print(f"[{context}] FIXING Process ID: {process_id}")
+            #print(f"Original location type: {type(location).__name__}")
+            #print(f"Original location content: {location}")
+            #print("-" * 40)
             entry["location"] = "no location"
             count_fixed += 1
 
@@ -441,8 +441,36 @@ def write_unlinked_flows_to_excel(importer, output_directory):
 
     print(f"Excel file saved to: {output_path}")
 
+########################################################################################################################
+## Methods for working with LCA computations
+########################################################################################################################
 
+def print_lci_matrix(activity):
+    """
+    Run an LCI calculation for a given activity and print the technosphere matrix.
 
+    Parameters:
+    -----------
+    activity : bw.Activity
+        A Brightway25 activity object to be used as the functional unit in the LCI calculation.
+
+    Returns:
+    --------
+    None
+        Prints the shape and contents of the LCI matrix to the console.
+    """
+    from bw2calc import LCA, LeastSquaresLCA
+
+    # Run LCI
+    lca = LeastSquaresLCA({activity: 1})
+    lca.lci()
+
+    # Convert sparse matrix to dense format
+    lci_matrix_dense = lca.technosphere_matrix.todense()
+
+    # Print matrix shape and contents
+    print("LCI Matrix shape:", lci_matrix_dense.shape)
+    print("LCI Matrix contents:\n", lci_matrix_dense)
 
 
 
