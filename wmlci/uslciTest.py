@@ -62,10 +62,7 @@ uslci_crudeOil.statistics()
 ## Dependencies ##
 
 from bw2calc import LCA, LeastSquaresLCA
-
 import bw2data as bd
-from bw2data import databases
-
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 from bw2io.strategies import *

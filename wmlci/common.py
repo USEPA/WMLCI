@@ -5,6 +5,22 @@ Functions common across datasets
 ## Methods for locating and understanding errors which occur when calling .apply_strategies() on JSONLDImporter objects
 ########################################################################################################################
 
+def print_avoided_input_uuids(jsonld):
+    """
+    Prints the UUIDs of processes and exchanges where avoided products are used as inputs.
+
+    Parameters:
+        jsonld (JSONLDImporter): An initialized JSONLDImporter object with data loaded.
+    """
+    print("🔍 Scanning for avoided products used as inputs...\n")
+    for pid, process in jsonld.data.get("processes", {}).items():
+        if process.get("isInput"):
+            for exc in process.get("exchanges", []):
+                if exc.get("isAvoidedProduct"):
+                    print(f"⚠️ Process UUID: {pid} -> Exchange UUID: {exc.get('id')}")
+    print("\n✅ Scan complete.")
+
+
 def find_missing_unit_group_id(ug_id, jsonld):
     """
     search for missing unit group uuid(s) in importer object
@@ -176,6 +192,41 @@ def find_unallocatable_processes(jsonld):
             print(f"   Available methods: {list(allocation_dict.keys())}")
             print("-" * 60)
 
+########################################################################################################################
+## General fixes                                                                                                      ##
+########################################################################################################################
+
+def fix_exchange_locations(jsonld):
+    """
+    Ensures all exchanges in each process have a valid 'location' field.
+    If an exchange has a missing, None, or non-string 'location', it inherits
+    the location from its parent process.
+
+    This function does NOT validate or modify the parent process location.
+
+    Parameters
+    ----------
+    jsonld : JSONLDImporter
+        An instance of the JSONLDImporter class containing `.data`.
+
+    Returns
+    -------
+    JSONLDImporter
+        The modified JSONLDImporter object with fixed exchange locations.
+    """
+    count_fixed = 0
+
+    for pid, process in jsonld.data.get("processes", {}).items():
+        parent_location = process.get("location")
+
+        for exc in process.get("exchanges", []):
+            location = exc.get("location")
+            if location is None or not isinstance(location, str):
+                exc["location"] = parent_location
+                count_fixed += 1
+
+    print(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
+    return jsonld
 
 
 
@@ -249,7 +300,7 @@ def apply_opposite_direction_approach(jsonld):
                     flow["flowType"] = "PRODUCT_FLOW"  # make reference flow
     return jsonld
 
-def append_jsonld_location(jsonld):
+def add_process_location(jsonld):
     """
     fix for strategy json_ld_location_name() from strategies/json_ld.py
     *** need to create some logic to infer location based on the location of the exchanges in the process (?)
@@ -264,9 +315,9 @@ def append_jsonld_location(jsonld):
             continue  # Location is already in the correct format
         else:
             process["location"] = {
-                "@id": "56bca136-90bb-3a77-9abb-7ce558af711e",
+                "@id": '0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2',
                 "@type": "Location",
-                "name": "Global"
+                "name": "United States"
             }
     return jsonld
 
