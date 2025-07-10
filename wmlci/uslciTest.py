@@ -121,8 +121,9 @@ IPCC = JSONLDLCIAImporter(lciapath)
 IPCC.apply_strategies()
 IPCC.match_biosphere_by_id('uslci')
 IPCC.statistics()
-IPCC.drop_unlinked()
-IPCC.write_methods() # uncomment if running for the first time
+IPCC.drop_unlinked(verbose=True)
+IPCC.statistics()
+IPCC.write_methods(overwrite=True) # uncomment if running for the first time
 
 
 '''
@@ -145,17 +146,16 @@ USLCI = bd.Database('uslci')
 
 # Get activity
 # Inspect contents and select the activity (i.e. process not the product flow)
-activity = [act for act in USLCI if "Crude oil, production mixture, at extraction" in act["name"]] # use lower case
+activity = [act for act in USLCI if "crude oil, production mixture, at extraction" in act["name"].lower()]
 activity = activity[1] # This selects the activity
-print(activity)
+#print(activity)
 
 # Print all exchanges
 for exc in activity.exchanges():
    print(f"{exc['amount']} {exc['unit']} of {exc.input['name']} ({exc.input['location']}) - type: {exc['type']}")
 
-# Select LCIA methods to use for running LCA
-# Running results for all IPCC methods
-# Calculate and print results for all methods
+# Select LCIA method to use for running LCA
+# Calculate and print results
 results = []
 method = ('IPCC','AR6-20')
 funcUnt, data_objs, _ = bd.prepare_lca_inputs(

@@ -333,7 +333,7 @@ def clean_all_locations(jsonld):
     for product in jsonld.products:
         clean_entry(product, "PRODUCT")
 
-    print(f"✅ Total entries fixed: {count_fixed}")
+    print(f"✅ Total entries' location fixed: {count_fixed}")
 
 def write_unlinked_flows_to_excel(importer, output_directory):
     """
