@@ -74,14 +74,19 @@ uslci = JSONLDImporter(
 uslci = correct_jsonld_input_key(uslci) # BW expects the key 'input
 
 ## Apply the Opposite Direction Approach ##
-# Converting non-cutoff waste outputs to inputs in the producing process
-uslci = apply_opposite_direction_approach(uslci)
+uslci = apply_opposite_direction_approach(uslci) # Converting non-cutoff waste outputs to inputs in the producing process
+
+## Run default provider QA/QC ##
+# Save errors to spreadsheet at location defined in path
+errorPath = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\providerErrorTracking.xlsx'
+check_default_providers(uslci, errorPath, debug=True)
 
 ## Fix location errors ##
-uslci = add_process_location(uslci) # add default 'United States' location when process is missing location attribute
-uslci = fix_exchange_locations(uslci)
+uslci = add_process_location(uslci) # Add default 'United States' location when process is missing location attribute
+uslci = fix_exchange_locations(uslci) # For exchanges missing location, inherit parent process location data
 
+## Temp fix where there is >1 'PRODUCT_FLOW' per process ##
 uslci = edit_non_quant_ref_flow_type(uslci) # change output exchanges that are not ref flow to TECHNOSPHERE_FLOW
 
-
-
+## Apply strategies ##
+uslci.apply_strategies()

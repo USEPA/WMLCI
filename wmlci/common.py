@@ -1,3 +1,9 @@
+import pandas as pd
+from collections import defaultdict
+import os
+import hashlib
+from typing import Optional, List
+from bw2calc import LCA, LeastSquaresLCA
 """
 Functions common across datasets
 """
@@ -156,7 +162,6 @@ def find_unallocatable_processes(jsonld):
     :param jsonld:
     :return:
     """
-    from collections import defaultdict
     for process_id, process in jsonld.data.get("processes", {}).items():
         # Skip if not allocatable
         if process.get("@type") in ("product", "emission"):
@@ -202,7 +207,10 @@ def fix_exchange_locations(jsonld):
     If an exchange has a missing, None, or non-string 'location', it inherits
     the location from its parent process.
 
-    This function does NOT validate or modify the parent process location.
+    Every 5000th fix prints:
+        1. Original exchange location value
+        2. Parent process location
+        3. Updated exchange location value
 
     Parameters
     ----------
@@ -220,13 +228,20 @@ def fix_exchange_locations(jsonld):
         parent_location = process.get("location")
 
         for exc in process.get("exchanges", []):
-            location = exc.get("location")
-            if location is None or not isinstance(location, str):
+            original_location = exc.get("location")
+            if original_location is None or not isinstance(original_location, str):
                 exc["location"] = parent_location
                 count_fixed += 1
 
+                if count_fixed % 1000 == 0:
+                    print(f"\n🔧 Fix #{count_fixed}")
+                    print(f"  - Original exchange location: {original_location}")
+                    print(f"  - Parent process location:    {parent_location}")
+                    print(f"  - Updated exchange location:  {exc['location']}")
+
     print(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
     return jsonld
+
 
 
 
@@ -268,6 +283,7 @@ def edit_non_quant_ref_flow_type(jsonld):
 
 def apply_opposite_direction_approach(jsonld):
     '''
+    https://greendelta.github.io/openLCA2-manual/waste_modelling.html#opposite-direction-approach
     fix for strategy json_ld_add_activity_unit() from strategies/json_ld.py
     use the opposite direction approach for waste treatment processes
     this is required so that production exchanges are present in waste treatment processes
@@ -363,7 +379,6 @@ def clean_all_locations(jsonld):
         the changes made.
     """
     count_fixed = 0
-
     def clean_entry(entry, context=""):
         nonlocal count_fixed
         location = entry.get("location")
@@ -412,11 +427,6 @@ def write_unlinked_flows_to_excel(importer, output_directory):
         - "process_with_unlinked_exc"
         - "unique_process_unlinked_exc"
     """
-    import os
-    import pandas as pd
-    import hashlib
-    from typing import Optional, List
-
     # Define activity_hash inline (or import from bw2data.utils if available)
     def activity_hash(data: dict, fields: Optional[List[str]] = None, case_insensitive: bool = True) -> str:
         default_fields = ["name", "unit", "location", "type", "categories", "code"]
@@ -510,8 +520,6 @@ def print_lci_matrix(activity):
     None
         Prints the shape and contents of the LCI matrix to the console.
     """
-    from bw2calc import LCA, LeastSquaresLCA
-
     # Run LCI
     lca = LeastSquaresLCA({activity: 1})
     lca.lci()
@@ -522,6 +530,322 @@ def print_lci_matrix(activity):
     # Print matrix shape and contents
     print("LCI Matrix shape:", lci_matrix_dense.shape)
     print("LCI Matrix contents:\n", lci_matrix_dense)
+
+########################################################################################################################
+### Dataframe management                                                                                             ###
+########################################################################################################################
+
+def importer_to_df(imp):
+    """
+    Extracts process and production exchange data from a Brightway2-style dataset.
+
+    Parameters:
+        uslci_data (list): A list of dictionaries representing processes and their exchanges.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing process names, codes, exchange names, and related metadata.
+    """
+    process_name = []
+    exchange_name = []
+    code = []
+    inputt = []
+    process_code = []
+    output = []
+
+    for us_p in imp:
+        if us_p.get('type') == 'process':
+            for exch in us_p.get('exchanges', []):
+                if exch.get('type') == 'production':
+                    process_name.append(us_p.get('name'))
+                    process_code.append(us_p.get('code'))
+                    exchange_name.append(exch.get('name', 'missing'))
+                    code.append(exch.get('code', 'missing'))
+                    inputt.append(exch.get('input'))
+                    output.append(exch.get('output'))
+
+    df = pd.DataFrame({
+        'process': process_name,
+        'process_code': process_code,
+        'exchange': exchange_name,
+        'code': code,
+        'input': inputt,
+        'output': output
+    })
+
+    return df
+
+#####################
+### QA/QC methods ###
+#####################
+
+def check_default_providers(importer, output_path, debug=False):
+    """
+    Validates the consistency and completeness of defaultProvider links in a Brightway2 JSONLDImporter object.
+
+    Parameters:
+    -----------
+    importer : JSONLDImporter
+        A Brightway2 importer object with a `.data` attribute containing a dictionary of processes.
+
+    output_path : str
+        Path to save the resulting Excel file with error reports. If no extension is provided, '.xlsx' is appended.
+
+    debug : bool, optional
+        If True, prints debug information including counts of processes, exchanges, and skipped/malformed entries.
+
+    Behavior:
+    ---------
+    - Iterates through each process and its exchanges.
+    - Validates that defaultProvider metadata is complete and of correct type.
+    - Confirms that the defaultProvider exists in the process list.
+    - Compares metadata between the exchange and the matched provider.
+    - Verifies that the provider has an exchange matching the flow of the original exchange.
+    - Ensures that the matching exchange is not incorrectly marked as an input.
+    - Compares metadata between the exchange and the matching exchange in the provider.
+
+    Output:
+    -------
+    - An Excel file with multiple sheets, each named after a specific type of issue:
+        - issueWithFlowPrvMetadata
+        - noMatchingProviderToExch
+        - targetPrvNameNotMatchingFoundPrvName
+        - targetPrvCatNotMatchingFoundPrvCat
+        - targetPrvFTNotMatchingFoundPrvFT
+        - noMatchingExchangeInFoundProvider
+        - matchingExchangeFromProviderIsInput
+        - targetPrvNameNotMatchingFoundPrvExchName
+        - targetPrvCatNotMatchingFoundPrvExchCat
+        - targetPrvFTNotMatchingFoundPrvExchFT
+    - If no issues are found, a sheet named "NoIssuesFound" is written with a summary message.
+
+    Returns:
+    --------
+    None
+    """
+    # Ensure output path ends with .xlsx
+    if not output_path.lower().endswith(".xlsx"):
+        output_path += ".xlsx"
+
+    # Initialize error dictionaries
+    issueWithFlowPrvMetadata = []
+    noMatchingProviderToExch = []
+    targetPrvNameNotMatchingFoundPrvName = []
+    targetPrvCatNotMatchingFoundPrvCat = []
+    targetPrvFTNotMatchingFoundPrvFT = []
+    noMatchingExchangeInFoundProvider = []
+    matchingExchangeFromProviderIsInput = []
+    targetPrvNameNotMatchingFoundPrvExchName = []
+    targetPrvCatNotMatchingFoundPrvExchCat = []
+    targetPrvFTNotMatchingFoundPrvExchFT = []
+
+    # Debug counters
+    total_processes = 0
+    total_exchanges_checked = 0
+    skipped_exchanges = 0
+    malformed_flows = 0
+    malformed_providers = 0
+
+    processes = importer.data.get("processes", {})
+
+    for parentProcessID, process in processes.items():
+        total_processes += 1
+        exchanges = process.get("exchanges", [])
+        for exch in exchanges:
+            if not isinstance(exch, dict):
+                skipped_exchanges += 1
+                continue
+            if not exch.get("input", False):
+                continue
+            flow = exch.get("flow", {})
+            if not isinstance(flow, dict):
+                malformed_flows += 1
+                continue
+            if flow.get("flowType") == "ELEMENTARY_FLOW":
+                continue
+            if flow.get("flowType") == "PRODUCT_FLOW":
+                total_exchanges_checked += 1
+                targetID = flow.get("@id")
+                targetName = flow.get("name")
+                targetCat = flow.get("category")
+                targetFT = flow.get("flowType")
+
+                defaultProvider = exch.get("defaultProvider", {})
+                if not isinstance(defaultProvider, dict):
+                    malformed_providers += 1
+                    continue
+
+                if not all(isinstance(defaultProvider.get(k), str) and defaultProvider.get(k) for k in
+                           ["@id", "name", "category", "flowType"]):
+                    issueWithFlowPrvMetadata.append({
+                        "parentProcessID": parentProcessID,
+                        "targetID": targetID,
+                        "targetName": targetName,
+                        "targetCat": targetCat,
+                        "targetFT": targetFT
+                    })
+                    continue
+
+                targetPrvID = defaultProvider["@id"]
+                targetPrvName = defaultProvider["name"]
+                targetPrvCat = defaultProvider["category"]
+                targetPrvFT = defaultProvider["flowType"]
+
+                found_provider = processes.get(targetPrvID)
+                if not found_provider:
+                    noMatchingProviderToExch.append({
+                        "targetPrvID": targetPrvID,
+                        "targetPrvName": targetPrvName,
+                        "targetPrvCat": targetPrvCat,
+                        "targetPrvFT": targetPrvFT
+                    })
+                    continue
+
+                foundPrvID = found_provider.get("@id")
+                foundPrvName = found_provider.get("name")
+                foundPrvCat = found_provider.get("category")
+                foundPrvFT = found_provider.get("flowType")
+
+                if targetPrvName != foundPrvName:
+                    targetPrvNameNotMatchingFoundPrvName.append({
+                        "parentProcessID": parentProcessID,
+                        "targetID": targetID,
+                        "targetName": targetName,
+                        "targetCat": targetCat,
+                        "targetFT": targetFT,
+                        "foundPrvID": foundPrvID,
+                        "foundPrvName": foundPrvName,
+                        "foundPrvCat": foundPrvCat,
+                        "foundPrvFT": foundPrvFT
+                    })
+
+                if targetPrvCat != foundPrvCat:
+                    targetPrvCatNotMatchingFoundPrvCat.append({
+                        "parentProcessID": parentProcessID,
+                        "targetID": targetID,
+                        "targetName": targetName,
+                        "targetCat": targetCat,
+                        "targetFT": targetFT,
+                        "foundPrvID": foundPrvID,
+                        "foundPrvName": foundPrvName,
+                        "foundPrvCat": foundPrvCat,
+                        "foundPrvFT": foundPrvFT
+                    })
+
+                if targetPrvFT != foundPrvFT:
+                    targetPrvFTNotMatchingFoundPrvFT.append({
+                        "parentProcessID": parentProcessID,
+                        "targetID": targetID,
+                        "targetName": targetName,
+                        "targetCat": targetCat,
+                        "targetFT": targetFT,
+                        "foundPrvID": foundPrvID,
+                        "foundPrvName": foundPrvName,
+                        "foundPrvCat": foundPrvCat,
+                        "foundPrvFT": foundPrvFT
+                    })
+
+                found_match = False
+                for found_exch in found_provider.get("exchanges", []):
+                    found_flow = found_exch.get("flow", {})
+                    foundPrvExchID = found_flow.get("@id")
+                    if foundPrvExchID != targetID:
+                        continue
+                    found_match = True
+                    if found_exch.get("input", True):
+                        matchingExchangeFromProviderIsInput.append({
+                            "parentProcessID": parentProcessID,
+                            "targetID": targetID,
+                            "foundPrvID": foundPrvID,
+                            "foundPrvExchID": foundPrvExchID
+                        })
+                    else:
+                        foundPrvExchName = found_flow.get("name")
+                        foundPrvExchCat = found_flow.get("category")
+                        foundPrvExchFT = found_flow.get("flowType")
+
+                        if targetPrvName != foundPrvExchName:
+                            targetPrvNameNotMatchingFoundPrvExchName.append({
+                                "parentProcessID": parentProcessID,
+                                "targetID": targetID,
+                                "targetName": targetName,
+                                "targetCat": targetCat,
+                                "targetFT": targetFT,
+                                "foundPrvExchID": foundPrvExchID,
+                                "foundPrvExchName": foundPrvExchName,
+                                "foundPrvExchCat": foundPrvExchCat,
+                                "foundPrvExchFT": foundPrvExchFT
+                            })
+                        if targetPrvCat != foundPrvExchCat:
+                            targetPrvCatNotMatchingFoundPrvExchCat.append({
+                                "parentProcessID": parentProcessID,
+                                "targetID": targetID,
+                                "targetName": targetName,
+                                "targetCat": targetCat,
+                                "targetFT": targetFT,
+                                "foundPrvExchID": foundPrvExchID,
+                                "foundPrvExchName": foundPrvExchName,
+                                "foundPrvExchCat": foundPrvExchCat,
+                                "foundPrvExchFT": foundPrvExchFT
+                            })
+                        if targetPrvFT != foundPrvExchFT:
+                            targetPrvFTNotMatchingFoundPrvExchFT.append({
+                                "parentProcessID": parentProcessID,
+                                "targetID": targetID,
+                                "targetName": targetName,
+                                "targetCat": targetCat,
+                                "targetFT": targetFT,
+                                "foundPrvExchID": foundPrvExchID,
+                                "foundPrvExchName": foundPrvExchName,
+                                "foundPrvExchCat": foundPrvExchCat,
+                                "foundPrvExchFT": foundPrvExchFT
+                            })
+                if not found_match:
+                    noMatchingExchangeInFoundProvider.append({
+                        "parentProcessID": parentProcessID,
+                        "targetID": targetID,
+                        "foundPrvID": foundPrvID
+                    })
+
+    # Write to Excel
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        error_dicts = {
+            "issueWithFlowPrvMetadata": issueWithFlowPrvMetadata,
+            "noMatchingProviderToExch": noMatchingProviderToExch,
+            "targetPrvNameNotMatchingFoundPrvName": targetPrvNameNotMatchingFoundPrvName,
+            "targetPrvCatNotMatchingFoundPrvCat": targetPrvCatNotMatchingFoundPrvCat,
+            "targetPrvFTNotMatchingFoundPrvFT": targetPrvFTNotMatchingFoundPrvFT,
+            "noMatchingExchangeInFoundProvider": noMatchingExchangeInFoundProvider,
+            "matchingExchangeFromProviderIsInput": matchingExchangeFromProviderIsInput,
+            "targetPrvNameNotMatchingFoundPrvExchName": targetPrvNameNotMatchingFoundPrvExchName,
+            "targetPrvCatNotMatchingFoundPrvExchCat": targetPrvCatNotMatchingFoundPrvExchCat,
+            "targetPrvFTNotMatchingFoundPrvExchFT": targetPrvFTNotMatchingFoundPrvExchFT
+        }
+
+        any_written = False
+        for sheet_name, data in error_dicts.items():
+            if data:
+                pd.DataFrame(data).to_excel(writer, sheet_name=sheet_name, index=False)
+                any_written = True
+
+        if not any_written:
+            pd.DataFrame([{"message": "No issues were found in the provider checks."}]).to_excel(writer,
+                                                                                                 sheet_name="NoIssuesFound",
+                                                                                                 index=False)
+
+    # Debug output
+    if debug:
+        print("🔍 Debug Summary:")
+        print(f"Total processes checked: {total_processes}")
+        print(f"Total exchanges checked: {total_exchanges_checked}")
+        print(f"Skipped exchanges (non-dict or not input): {skipped_exchanges}")
+        print(f"Malformed flow entries: {malformed_flows}")
+        print(f"Malformed defaultProvider entries: {malformed_providers}")
+        print("✅ Debug summary complete.")
+
+
+
+
+
 
 
 

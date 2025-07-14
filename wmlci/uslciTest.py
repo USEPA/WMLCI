@@ -67,6 +67,7 @@ from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 from bw2io.strategies import *
 from bw2io.strategies.special import *
+import multifunctional
 
 from wmlci.common import *
 
@@ -90,7 +91,7 @@ print(uslci.data.keys()) # listing the keys
 uslci = correct_jsonld_input_key(uslci) # change 'isInput' key in exchanges to 'input' as expected by BW
 uslci = edit_non_quant_ref_flow_type(uslci) # change output exchanges that are not ref flow to TECHNOSPHERE_FLOW
 uslci = apply_opposite_direction_approach(uslci) # apply opposite direction approach to waste treatment processes
-uslci = append_jsonld_location(uslci) # add default 'Global' location when process is missing location attribute
+uslci = add_process_location(uslci) # add default 'Global' location when process is missing location attribute
 
 
 ## Apply strategies, evaluate linkages, write databases ##
