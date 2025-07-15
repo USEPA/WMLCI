@@ -15,8 +15,9 @@ List of implemented fixes:
 ### DEPENDENCIES ###
 ####################
 
-# Cleaning functions
+# Repository
 from wmlci.common import *
+from wmlci.settings import datapath
 
 # Brightway
 import bw2data as bd
@@ -78,7 +79,7 @@ uslci = apply_opposite_direction_approach(uslci) # Converting non-cutoff waste o
 
 ## Run default provider QA/QC ##
 # Save errors to spreadsheet at location defined in path
-errorPath = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\providerErrorTracking.xlsx'
+errorPath = f'{datapath}/prodPrvErrorTracking.xlsx'
 check_default_providers(uslci, errorPath, debug=True)
 
 ## Fix location errors ##

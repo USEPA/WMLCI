@@ -4,6 +4,10 @@ import os
 import hashlib
 from typing import Optional, List
 from bw2calc import LCA, LeastSquaresLCA
+from openpyxl import Workbook
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.worksheet.views import SheetView
 """
 Functions common across datasets
 """
@@ -578,90 +582,112 @@ def importer_to_df(imp):
 ### QA/QC methods ###
 #####################
 
+def write_provider_errors(error_dicts, output_path):
+    """
+    Opens an existing Excel workbook, retains only the 'Documentation' sheet,
+    deletes all other sheets, and adds new sheets for each error dictionary provided.
+    Each new sheet will have the top row frozen to keep column headers visible.
+
+    Parameters:
+    - error_dicts (dict): Dictionary where keys are sheet names and values are lists of dictionaries (rows).
+    - output_path (str): Path to the existing Excel file to modify.
+
+    Returns:
+    - None
+    """
+    # Ensure the file exists
+    if not os.path.exists(output_path):
+        raise FileNotFoundError(f"The file {output_path} does not exist.")
+
+    # Load the workbook
+    wb = openpyxl.load_workbook(output_path)
+
+    # Retain only the 'Documentation' sheet
+    for sheet in wb.sheetnames:
+        if sheet != 'Documentation':
+            std = wb[sheet]
+            wb.remove(std)
+
+    # Add new sheets for each error dictionary
+    for sheet_name, records in error_dicts.items():
+        # Create DataFrame from list of dictionaries
+        df = pd.DataFrame(records)
+
+        # Add new sheet
+        ws = wb.create_sheet(title=sheet_name[:31])  # Excel sheet name limit
+
+        # Write DataFrame to sheet
+        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
+            for c_idx, value in enumerate(row, 1):
+                ws.cell(row=r_idx, column=c_idx, value=value)
+
+        # Freeze top row
+        ws.freeze_panes = "A2"
+
+    # Save the workbook
+    wb.save(output_path)
+
 def check_default_providers(importer, output_path, debug=False):
     """
     Validates the consistency and completeness of defaultProvider links in a Brightway2 JSONLDImporter object.
 
     Parameters:
-    -----------
-    importer : JSONLDImporter
-        A Brightway2 importer object with a `.data` attribute containing a dictionary of processes.
-
-    output_path : str
-        Path to save the resulting Excel file with error reports. If no extension is provided, '.xlsx' is appended.
-
-    debug : bool, optional
-        If True, prints debug information including counts of processes, exchanges, and skipped/malformed entries.
+    - importer: A JSONLDImporter object with a `.data` attribute containing a 'processes' dictionary.
+    - output_path: Path to an existing Excel file with a 'Documentation' tab. This function will overwrite all other tabs.
+    - debug: If True, prints a summary of processing statistics.
 
     Behavior:
-    ---------
     - Iterates through each process and its exchanges.
-    - Validates that defaultProvider metadata is complete and of correct type.
-    - Confirms that the defaultProvider exists in the process list.
+    - Validates that defaultProvider metadata is complete and matches a known process.
     - Compares metadata between the exchange and the matched provider.
     - Verifies that the provider has an exchange matching the flow of the original exchange.
     - Ensures that the matching exchange is not incorrectly marked as an input.
     - Compares metadata between the exchange and the matching exchange in the provider.
 
     Output:
-    -------
-    - An Excel file with multiple sheets, each named after a specific type of issue:
-        - issueWithFlowPrvMetadata
-        - noMatchingProviderToExch
-        - targetPrvNameNotMatchingFoundPrvName
-        - targetPrvCatNotMatchingFoundPrvCat
-        - targetPrvFTNotMatchingFoundPrvFT
-        - noMatchingExchangeInFoundProvider
-        - matchingExchangeFromProviderIsInput
-        - targetPrvNameNotMatchingFoundPrvExchName
-        - targetPrvCatNotMatchingFoundPrvExchCat
-        - targetPrvFTNotMatchingFoundPrvExchFT
-    - If no issues are found, a sheet named "NoIssuesFound" is written with a summary message.
+    - Calls `write_error_tabs_to_existing_workbook()` to write all error dictionaries to separate sheets in the Excel file.
+    - Each sheet contains rows of issues found in that category.
+    - The top row of each sheet is frozen for readability.
 
     Returns:
-    --------
-    None
+    - None
     """
-    # Ensure output path ends with .xlsx
-    if not output_path.lower().endswith(".xlsx"):
-        output_path += ".xlsx"
+    error_dicts = {
+        "issueWithFlowPrvMetadata": [],
+        "noMatchPrvToExc": [],
+        "tarPrvNameNoMatchFoundPrvName": [],
+        "tarPrvCatNoMatchFoundPrvCat": [],
+        "noMatchExcInFoundPrv": [],
+        "matchExcFromPrvIsInput": [],
+        "tarPrvNameNoMatchPrvExcName": [],
+        "tarPrvCatNoMatchFoundPrvExcCat": [],
+        "tarPrvFTNoMatchFoundPrvExchFT": []
+    }
 
-    # Initialize error dictionaries
-    issueWithFlowPrvMetadata = []
-    noMatchingProviderToExch = []
-    targetPrvNameNotMatchingFoundPrvName = []
-    targetPrvCatNotMatchingFoundPrvCat = []
-    targetPrvFTNotMatchingFoundPrvFT = []
-    noMatchingExchangeInFoundProvider = []
-    matchingExchangeFromProviderIsInput = []
-    targetPrvNameNotMatchingFoundPrvExchName = []
-    targetPrvCatNotMatchingFoundPrvExchCat = []
-    targetPrvFTNotMatchingFoundPrvExchFT = []
-
-    # Debug counters
     total_processes = 0
     total_exchanges_checked = 0
+    exch_not_dict = 0
     skipped_exchanges = 0
     malformed_flows = 0
     malformed_providers = 0
 
-    processes = importer.data.get("processes", {})
-
-    for parentProcessID, process in processes.items():
+    for parentProcessID, process in importer.data.get("processes", {}).items():
         total_processes += 1
         exchanges = process.get("exchanges", [])
         for exch in exchanges:
             if not isinstance(exch, dict):
-                skipped_exchanges += 1
+                exch_not_dict += 1
                 continue
             if not exch.get("input", False):
+                skipped_exchanges += 1
                 continue
             flow = exch.get("flow", {})
             if not isinstance(flow, dict):
                 malformed_flows += 1
                 continue
-            if flow.get("flowType") == "ELEMENTARY_FLOW":
+            if flow.get("flowType") != "PRODUCT_FLOW":
                 continue
+
             if flow.get("flowType") == "PRODUCT_FLOW":
                 total_exchanges_checked += 1
                 targetID = flow.get("@id")
@@ -670,13 +696,9 @@ def check_default_providers(importer, output_path, debug=False):
                 targetFT = flow.get("flowType")
 
                 defaultProvider = exch.get("defaultProvider", {})
-                if not isinstance(defaultProvider, dict):
+                if not all(isinstance(defaultProvider.get(k), str) and defaultProvider.get(k) for k in ["@id", "name", "category", "flowType"]):
                     malformed_providers += 1
-                    continue
-
-                if not all(isinstance(defaultProvider.get(k), str) and defaultProvider.get(k) for k in
-                           ["@id", "name", "category", "flowType"]):
-                    issueWithFlowPrvMetadata.append({
+                    error_dicts["issueWithFlowPrvMetadata"].append({
                         "parentProcessID": parentProcessID,
                         "targetID": targetID,
                         "targetName": targetName,
@@ -688,83 +710,63 @@ def check_default_providers(importer, output_path, debug=False):
                 targetPrvID = defaultProvider["@id"]
                 targetPrvName = defaultProvider["name"]
                 targetPrvCat = defaultProvider["category"]
-                targetPrvFT = defaultProvider["flowType"]
 
-                found_provider = processes.get(targetPrvID)
-                if not found_provider:
-                    noMatchingProviderToExch.append({
+                foundPrv = importer.data.get("processes", {}).get(targetPrvID)
+                if not foundPrv:
+                    error_dicts["noMatchPrvToExc"].append({
                         "targetPrvID": targetPrvID,
                         "targetPrvName": targetPrvName,
-                        "targetPrvCat": targetPrvCat,
-                        "targetPrvFT": targetPrvFT
+                        "targetPrvCat": targetPrvCat
                     })
                     continue
 
-                foundPrvID = found_provider.get("@id")
-                foundPrvName = found_provider.get("name")
-                foundPrvCat = found_provider.get("category")
-                foundPrvFT = found_provider.get("flowType")
+                foundPrvID = foundPrv.get("@id")
+                foundPrvName = foundPrv.get("name")
+                foundPrvCat = foundPrv.get("category")
 
                 if targetPrvName != foundPrvName:
-                    targetPrvNameNotMatchingFoundPrvName.append({
+                    error_dicts["tarPrvNameNoMatchFoundPrvName"].append({
                         "parentProcessID": parentProcessID,
                         "targetID": targetID,
                         "targetName": targetName,
                         "targetCat": targetCat,
-                        "targetFT": targetFT,
                         "foundPrvID": foundPrvID,
                         "foundPrvName": foundPrvName,
-                        "foundPrvCat": foundPrvCat,
-                        "foundPrvFT": foundPrvFT
+                        "foundPrvCat": foundPrvCat
                     })
 
                 if targetPrvCat != foundPrvCat:
-                    targetPrvCatNotMatchingFoundPrvCat.append({
+                    error_dicts["tarPrvCatNoMatchFoundPrvCat"].append({
                         "parentProcessID": parentProcessID,
                         "targetID": targetID,
                         "targetName": targetName,
                         "targetCat": targetCat,
-                        "targetFT": targetFT,
                         "foundPrvID": foundPrvID,
                         "foundPrvName": foundPrvName,
-                        "foundPrvCat": foundPrvCat,
-                        "foundPrvFT": foundPrvFT
-                    })
-
-                if targetPrvFT != foundPrvFT:
-                    targetPrvFTNotMatchingFoundPrvFT.append({
-                        "parentProcessID": parentProcessID,
-                        "targetID": targetID,
-                        "targetName": targetName,
-                        "targetCat": targetCat,
-                        "targetFT": targetFT,
-                        "foundPrvID": foundPrvID,
-                        "foundPrvName": foundPrvName,
-                        "foundPrvCat": foundPrvCat,
-                        "foundPrvFT": foundPrvFT
+                        "foundPrvCat": foundPrvCat
                     })
 
                 found_match = False
-                for found_exch in found_provider.get("exchanges", []):
-                    found_flow = found_exch.get("flow", {})
-                    foundPrvExchID = found_flow.get("@id")
+                for found_exch in foundPrv.get("exchanges", []):
+                    foundPrvExchFlow = found_exch.get("flow", {})
+                    foundPrvExchID = foundPrvExchFlow.get("@id")
                     if foundPrvExchID != targetID:
                         continue
                     found_match = True
-                    if found_exch.get("input", True):
-                        matchingExchangeFromProviderIsInput.append({
+                    if found_exch.get("input", False):
+                        error_dicts["matchExcFromPrvIsInput"].append({
                             "parentProcessID": parentProcessID,
                             "targetID": targetID,
                             "foundPrvID": foundPrvID,
                             "foundPrvExchID": foundPrvExchID
                         })
                     else:
-                        foundPrvExchName = found_flow.get("name")
-                        foundPrvExchCat = found_flow.get("category")
-                        foundPrvExchFT = found_flow.get("flowType")
+                        foundPrvExchName = foundPrvExchFlow.get("name")
+                        foundPrvExchCat = foundPrvExchFlow.get("category")
+                        foundPrvExchFT = foundPrvExchFlow.get("flowType")
 
                         if targetPrvName != foundPrvExchName:
-                            targetPrvNameNotMatchingFoundPrvExchName.append({
+                            error_dicts["tarPrvNameNoMatchPrvExcName"].append({
                                 "parentProcessID": parentProcessID,
                                 "targetID": targetID,
                                 "targetName": targetName,
@@ -775,8 +777,9 @@ def check_default_providers(importer, output_path, debug=False):
                                 "foundPrvExchCat": foundPrvExchCat,
                                 "foundPrvExchFT": foundPrvExchFT
                             })
+
                         if targetPrvCat != foundPrvExchCat:
-                            targetPrvCatNotMatchingFoundPrvExchCat.append({
+                            error_dicts["tarPrvCatNoMatchFoundPrvExcCat"].append({
                                 "parentProcessID": parentProcessID,
                                 "targetID": targetID,
                                 "targetName": targetName,
@@ -787,8 +790,9 @@ def check_default_providers(importer, output_path, debug=False):
                                 "foundPrvExchCat": foundPrvExchCat,
                                 "foundPrvExchFT": foundPrvExchFT
                             })
-                        if targetPrvFT != foundPrvExchFT:
-                            targetPrvFTNotMatchingFoundPrvExchFT.append({
+
+                        if targetFT != foundPrvExchFT:
+                            error_dicts["tarPrvFTNoMatchFoundPrvExchFT"].append({
                                 "parentProcessID": parentProcessID,
                                 "targetID": targetID,
                                 "targetName": targetName,
@@ -799,48 +803,28 @@ def check_default_providers(importer, output_path, debug=False):
                                 "foundPrvExchCat": foundPrvExchCat,
                                 "foundPrvExchFT": foundPrvExchFT
                             })
+                    break
+
                 if not found_match:
-                    noMatchingExchangeInFoundProvider.append({
+                    error_dicts["noMatchExcInFoundPrv"].append({
                         "parentProcessID": parentProcessID,
                         "targetID": targetID,
                         "foundPrvID": foundPrvID
                     })
 
-    # Write to Excel
-    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-        error_dicts = {
-            "issueWithFlowPrvMetadata": issueWithFlowPrvMetadata,
-            "noMatchingProviderToExch": noMatchingProviderToExch,
-            "targetPrvNameNotMatchingFoundPrvName": targetPrvNameNotMatchingFoundPrvName,
-            "targetPrvCatNotMatchingFoundPrvCat": targetPrvCatNotMatchingFoundPrvCat,
-            "targetPrvFTNotMatchingFoundPrvFT": targetPrvFTNotMatchingFoundPrvFT,
-            "noMatchingExchangeInFoundProvider": noMatchingExchangeInFoundProvider,
-            "matchingExchangeFromProviderIsInput": matchingExchangeFromProviderIsInput,
-            "targetPrvNameNotMatchingFoundPrvExchName": targetPrvNameNotMatchingFoundPrvExchName,
-            "targetPrvCatNotMatchingFoundPrvExchCat": targetPrvCatNotMatchingFoundPrvExchCat,
-            "targetPrvFTNotMatchingFoundPrvExchFT": targetPrvFTNotMatchingFoundPrvExchFT
-        }
-
-        any_written = False
-        for sheet_name, data in error_dicts.items():
-            if data:
-                pd.DataFrame(data).to_excel(writer, sheet_name=sheet_name, index=False)
-                any_written = True
-
-        if not any_written:
-            pd.DataFrame([{"message": "No issues were found in the provider checks."}]).to_excel(writer,
-                                                                                                 sheet_name="NoIssuesFound",
-                                                                                                 index=False)
-
-    # Debug output
     if debug:
         print("🔍 Debug Summary:")
         print(f"Total processes checked: {total_processes}")
         print(f"Total exchanges checked: {total_exchanges_checked}")
-        print(f"Skipped exchanges (non-dict or not input): {skipped_exchanges}")
+        print(f"Total exchanges that are not dictonaries: {exch_not_dict}")
+        print(f"Skipped exchanges (not input): {skipped_exchanges}")
         print(f"Malformed flow entries: {malformed_flows}")
         print(f"Malformed defaultProvider entries: {malformed_providers}")
         print("✅ Debug summary complete.")
+
+    write_provider_errors(error_dicts, output_path)
+
+
 
 
 
