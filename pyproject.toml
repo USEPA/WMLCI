@@ -17,7 +17,7 @@ authors = [
     {name = "Wesley W. Ingwersen", email = "ingwersen.wesley@epa.org"},
 ]
 dependencies = [
-    "esupy @ git+https://github.com/USEPA/esupy.git",
+    "esupy @ git+https://github.com/USEPA/esupy.git@develop#egg=esupy",
 
     "pip>=23.3",     # must specify when using pip installs
     "numpy<2 ",     # <2.0 required by BW2 pkgs as of Apr. 2025
