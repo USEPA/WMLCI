@@ -1,0 +1,29 @@
+{
+    "description": "Waste Management Life Cycle Inventory Model Assembler and Calculator.",
+    "license": "MIT",
+    "title": "WMLCI",
+    "upload_type": "software",
+    "creators": [
+        {
+            "affiliation": "Eastern Research Group",
+            "name": "Catherine Birney",
+            "orcid": "https://orcid.org/0000-0003-4467-9927"
+        },
+        {
+            "affiliation": "Eastern Research Group",
+            "name": "Martin Christie",
+            "orcid": ""
+        },
+        {
+            "affiliation": "Eastern Research Group",
+            "name": "Andrew Beck",
+            "orcid": ""
+        },
+        {
+            "affiliation": "US Environmental Protection Agency",
+            "name": "",
+            "orcid": ""
+        }
+    ],
+    "access_right": "open"
+}
