@@ -15,10 +15,13 @@ sourcedatapath = datapath / 'sourceData'
 paths = Paths()
 paths.local_path = paths.local_path / 'wmlci'
 outputpath = paths.local_path
-externalData = outputpath / 'externalData'
+sourceData = outputpath / 'sourceData'
+wmlcioutputpath = outputpath / 'WMLCI'
+logoutputpath = outputpath / 'Logs'
 
 # ensure directories exist
-mkdir_if_missing(externalData)
+for d in [sourceData,wmlcioutputpath, logoutputpath]:
+    mkdir_if_missing(d)
 
 # Common declaration of write format for package data products
 WRITE_FORMAT = "csv" #todo: change to parquet?
