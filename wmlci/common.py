@@ -8,6 +8,8 @@ from openpyxl import Workbook
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.views import SheetView
+
+from esupy.util import make_uuid
 """
 Functions common across datasets
 """
@@ -786,4 +788,30 @@ def check_default_providers(importer, output_path, debug=False):
 
     write_provider_errors(error_dicts, output_path)
 
+
+def assign_uuid():
+    """
+    Assign new UUID based on name/location/category fields. Uses EPA's useupy package for assignment
+    :return:
+    """
+
+    # todo: edit for bw code - pulled example code from fedelemflowlist repo
+
+    # # option 1 - class
+    # # set the UUID or generate it from the attributes
+    # if self.uid is None:
+    #     flow_ref.id = make_uuid("Flow", self.category, self.name)
+    # else:
+    #     flow_ref.id = self.uid
+    #
+    # # option 2 - for loop
+    # # Loop through flows generating UUID for each
+    # flowids = []
+    # log.info('Generating unique UUIDs for each flow...')
+    # for index, row in flows.iterrows():
+    #     flowid = make_uuid(row['Flowable'], row['Context'], row['Unit'])
+    #     flowids.append(flowid)
+    # flows['Flow UUID'] = flowids
+
+    # return
 
