@@ -9,7 +9,11 @@ import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.views import SheetView
 
+from wmlci.settings import paths
+from wmlci.wmlci_log import log
+from esupy.remote import make_url_request
 from esupy.util import make_uuid
+from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 """
 Functions common across datasets
 """
@@ -815,3 +819,27 @@ def assign_uuid():
 
     # return
 
+def download_source_data_from_remote(fname):
+    """
+    Download source data stored from USEPA's data commons to local directory
+    :param filename:
+    :return:
+    """
+
+    status = False
+    base_url = paths.remote_path / 'WMLCI/sourceData/'
+    url = base_url + fname
+    r = make_url_request(url)
+    if r is not None:
+        status = True
+        # set subdirectory
+        folder = paths.local_path / 'sourceData'
+        mkdir_if_missing(folder)
+        file = folder / fname
+        with file.open('wb') as fi:
+            fi.write(r.content)
+        log.info(f'{fname} downloaded from '
+                 f'{paths.remote_path}index.html?prefix=WMLCI/sourceData'
+                 f' and saved to {folder}')
+
+    return status
