@@ -1,5 +1,5 @@
-# do not upload the warm data - it is too large
-wmlci/data/warm_v16_openlca_database_2025-06-13/
+# do not upload any source data files, as they are too large
+wmlci/data/sourceData/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
