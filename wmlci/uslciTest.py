@@ -69,6 +69,7 @@ from bw2io.strategies import *
 from bw2io.strategies.special import *
 import multifunctional
 
+from wmlci.settings import sourcedatapath
 from wmlci.common import *
 
 ## Project Initiation ##
@@ -77,7 +78,7 @@ from wmlci.common import *
 bd.projects.set_current("usLciTest")
 
 ## Import USLCI w/ elci installed ##
-path = f'C:/Users/mchristie/OneDrive - Eastern Research Group/defaultFolders/Desktop/Databases/WARM refactor/USLCI'
+path = sourcedatapath / ('USLCI')
 uslci = JSONLDImporter(path,'uslci')
 
 # Checking basic data requirements
@@ -112,7 +113,7 @@ clean_all_locations(uslci)
 ## Import LCIA Methods ##
 
 # Importing IPCC via the JSONLDLCIAImporter
-lciapath = f'C:/Users/mchristie/OneDrive - Eastern Research Group/defaultFolders/Desktop/Databases/WARM refactor/IPCC'
+lciapath = sourcedatapath / 'IPCC'
 IPCC = JSONLDLCIAImporter(lciapath)
 
 # Apply strategies to LCIA, evaluate linkages, match biosphere flows to characterization factors
