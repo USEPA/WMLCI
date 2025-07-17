@@ -8,18 +8,17 @@ from esupy.util import get_git_hash, return_pkg_version
 MODULEPATH = Path(__file__).resolve().parent
 
 datapath = MODULEPATH / 'data'
-sourcedatapath = datapath / 'sourceData'
 
 # "Paths()" are a class defined in esupy
 paths = Paths()
 paths.local_path = paths.local_path / 'wmlci'
 outputpath = paths.local_path
-sourceData = outputpath / 'sourceData'
+sourcedatapath = outputpath / 'sourceData'
 wmlcioutputpath = outputpath / 'WMLCI'
 logoutputpath = outputpath / 'Logs'
 
 # ensure directories exist
-for d in [sourceData,wmlcioutputpath, logoutputpath]:
+for d in [sourcedatapath,wmlcioutputpath, logoutputpath]:
     mkdir_if_missing(d)
 
 # Common declaration of write format for package data products
