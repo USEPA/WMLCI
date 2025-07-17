@@ -8,8 +8,11 @@ from openpyxl import Workbook
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.views import SheetView
+import zipfile
 
-from wmlci.settings import paths
+from bw2io.importers.json_ld import JSONLDImporter
+
+from wmlci.settings import paths, sourcedatapath
 from wmlci.wmlci_log import log
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
@@ -843,3 +846,25 @@ def download_source_data_from_remote(fname):
                  f' and saved to {folder}')
 
     return status
+
+
+def load_JSONLD_sourceData(fname, bw_database_name='db'):
+    """
+    Load sourceData file. Checks for file in local directory, if does not exist, pulls file from USEPA's Data Commons
+    :param fname: str, filename for source data
+    :param bw_database_name: str, set database name, default name set to 'db'
+    :return:
+    """
+    # define path to source data
+    filepath = sourcedatapath / fname
+
+    # load jsonld source data from local directory. If data not found locally, download first, then load
+    if not filepath.exists():
+        download_source_data_from_remote(fname)
+        with zipfile.ZipFile(f"{filepath}.zip", 'r') as zip_ref:
+            zip_ref.extractall(filepath)
+        log.info(f"Unzipped {fname} to {sourcedatapath}")
+
+    jsonld = JSONLDImporter(filepath, bw_database_name)
+
+    return jsonld
