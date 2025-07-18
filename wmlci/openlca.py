@@ -9,6 +9,7 @@ import zipfile
 
 from wmlci.settings import datapath
 from wmlci.common import append_jsonld_location
+
 from bw2io.importers.base_lcia import LCIAImporter
 from bw2io.importers.json_ld import JSONLDImporter
 import bw2io as bi

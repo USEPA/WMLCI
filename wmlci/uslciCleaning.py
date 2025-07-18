@@ -17,6 +17,8 @@ List of implemented fixes:
 
 # Repository
 from wmlci.common import *
+from wmlci.editJsonLdImporter import *
+from wmlci.errorLogging import *
 from wmlci.settings import datapath
 
 # Brightway
@@ -47,39 +49,37 @@ for project in projects:
     print(f"Deleting project: {project.name}")
     bd.projects.delete_project(project.name, delete_dir=True)
 
-
 ## Set active project ##
 bd.projects.set_current("uslciCleaning")
 
 ## Set database and biosphere database names ##
 nameDB = 'uslci'
-nameBioDB = 'uslci biosphere'
-
-## Paths for JSON-LD files requiring import ##
-pathDB = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\USLCI'
 pathLCIA = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\IPCC'
+path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\uslci_merge_test'
 
-## Extract USLCI data from JSON-LD into importer object
-uslci = JSONLDImporter(
-    pathDB,
-    nameDB,
-    # Most USLCI allocations are based on physical allocations (source: Rebe Feraldi)
-    preferred_allocation="PHYSICAL_ALLOCATION"
-)
+## Import USLCI as JSON-LD
+#uslci = load_JSONLD_sourceData('USLCI Q2 2025 merged library', bw_database_name=nameDB)
+uslci = JSONLDImporter(path, nameDB)
 
 ###################################################################################
 ### Run debugging and cleaning functions such that apply_strategies() will work ###
 ###################################################################################
 
 ## Changing the key 'isInput' to 'input' ##
-uslci = correct_jsonld_input_key(uslci) # BW expects the key 'input
+uslci = correct_jsonld_input_key(uslci)  # BW expects the key 'input
+
+## Remove flows with categories matching those in the list below if they are inputs
+delCategories = ['Technosphere flows/CUTOFF Flows','Ecosystem Services']
+delete_flows_of_category(uslci,delCategories)
 
 ## Apply the Opposite Direction Approach ##
-uslci = apply_opposite_direction_approach(uslci) # Converting non-cutoff waste outputs to inputs in the producing process
+# Converts treated waste flows (excl. CUTOFFs) to inputs into waste producing process
+# Default providers are waste treatment processes
+uslci = apply_opposite_direction_approach(uslci)
 
 ## Run default provider QA/QC ##
 # Save errors to spreadsheet at location defined in path
-errorPath = f'{datapath}/prodPrvErrorTracking.xlsx'
+errorPath = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\providerErrorLogging.xlsx'
 check_default_providers(uslci, errorPath, debug=True)
 
 ## Fix location errors ##
