@@ -825,12 +825,12 @@ def assign_uuid():
 def download_source_data_from_remote(fname):
     """
     Download source data stored from USEPA's data commons to local directory
-    :param filename:
+    :param fname: str, filename, must include extension (such as .zip)
     :return:
     """
 
     status = False
-    base_url = paths.remote_path / 'WMLCI/sourceData/'
+    base_url = f"{paths.remote_path}WMLCI/sourceData/"
     url = base_url + fname
     r = make_url_request(url)
     if r is not None:
@@ -860,7 +860,7 @@ def load_JSONLD_sourceData(fname, bw_database_name='db'):
 
     # load jsonld source data from local directory. If data not found locally, download first, then load
     if not filepath.exists():
-        download_source_data_from_remote(fname)
+        download_source_data_from_remote(f"{fname}.zip")
         with zipfile.ZipFile(f"{filepath}.zip", 'r') as zip_ref:
             zip_ref.extractall(filepath)
         log.info(f"Unzipped {fname} to {sourcedatapath}")
