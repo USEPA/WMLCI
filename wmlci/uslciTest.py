@@ -78,8 +78,7 @@ from wmlci.common import *
 bd.projects.set_current("usLciTest")
 
 ## Import USLCI w/ elci installed ##
-path = sourcedatapath / ('USLCI')
-uslci = JSONLDImporter(path,'uslci')
+uslci = load_JSONLD_sourceData('USLCI_1_2025_06_0', bw_database_name='uslci')
 
 # Checking basic data requirements
 print(type(uslci.data)) # confirming data type is a dictionary
@@ -125,16 +124,16 @@ IPCC.statistics()
 IPCC.write_methods(overwrite=True) # uncomment if running for the first time
 
 
-'''
-# Export IPCC.data to a json file after running apply_strategies()
-import json
-# Convert the dict_values to a list
-data_list = list(IPCC.data)
-path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\IPCC_data'
-# Export to a JSON file
-with open(path, 'w', encoding='utf-8') as f:
-    json.dump(data_list, f, ensure_ascii=False, indent=4)
-'''
+
+# # Export IPCC.data to a json file after running apply_strategies()
+# import json
+# # Convert the dict_values to a list
+# data_list = list(IPCC.data)
+# path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\IPCC_data'
+# # Export to a JSON file
+# with open(path, 'w', encoding='utf-8') as f:
+#     json.dump(data_list, f, ensure_ascii=False, indent=4)
+
 
 ## Calculate LCA Results ##
 # https://learn.brightway.dev/en/latest/content/chapters/BW25/BW25_introduction.html
