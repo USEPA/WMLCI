@@ -7,6 +7,7 @@ from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 
+
 def delete_flows_of_category(importer, categories_to_delete):
     """
     Deletes exchanges and flows from the importer based on matching flow categories.
@@ -168,4 +169,28 @@ def fix_exchange_locations(jsonld):
                     print(f"  - Updated exchange location:  {exc['location']}")
 
     print(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
+    return jsonld
+
+
+def remove_process_allocation_factors(jsonld):
+    """
+    The WARM openLCA processes include allocationFactors that are at times missing "exchange" information.
+    This missing information results in the error:
+    bw2io.errors.UnallocatableDataset: We currently only support exchange-specific CAUSAL_ALLOCATION
+    As all have factors of "1" - this information can be removed
+    :param jsonld:
+    :return:
+    """
+
+    for pid, process in jsonld.data.get("processes", {}).items():
+        # pull allocation factors where value is not equal to 1, these factors are kept
+        filtered = [
+            af for af in process.get("allocationFactors", []) if af.get("value") != 1
+        ]
+
+        if filtered:
+            process["allocationFactors"] = filtered
+        else:
+            process.pop("allocationFactors", None)
+
     return jsonld
