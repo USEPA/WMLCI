@@ -2,6 +2,7 @@
 import zipfile
 
 from bw2io.importers.json_ld import JSONLDImporter
+from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
 from wmlci.settings import paths, sourcedatapath
 from wmlci.wmlci_log import log
@@ -65,10 +66,11 @@ def download_source_data_from_remote(fname):
     return status
 
 
-def load_JSONLD_sourceData(fname, bw_database_name='db'):
+def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     """
     Load sourceData file. Checks for file in local directory, if does not exist, pulls file from USEPA's Data Commons
     :param fname: str, filename for source data
+    :param datatype: str, 'jsonld' or 'jsonldlcia'
     :param bw_database_name: str, set database name, default name set to 'db'
     :return:
     """
@@ -82,7 +84,12 @@ def load_JSONLD_sourceData(fname, bw_database_name='db'):
             zip_ref.extractall(filepath)
         log.info(f"Unzipped {fname} to {sourcedatapath}")
 
-    jsonld = JSONLDImporter(filepath, bw_database_name)
+    if datatype == 'jsonld':
+        jsonld = JSONLDImporter(filepath, bw_database_name)
+    elif datatype == 'jsonldlcia':
+        jsonld = JSONLDLCIAImporter(filepath)
+    else:
+        log.error("Specify data type as 'jsonld' or 'jsonldlcia'")
 
     return jsonld
 
