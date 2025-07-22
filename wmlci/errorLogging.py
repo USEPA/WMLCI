@@ -206,7 +206,7 @@ def find_unallocatable_processes(jsonld):
 ##########################################
 ### Find issues with default providers ###
 ##########################################
-
+'''
 def check_default_provider_dict(parent_id, target_id, importer):
     """
     Checks the following:
@@ -217,10 +217,58 @@ def check_default_provider_dict(parent_id, target_id, importer):
     Returns error dictionary if any of these fail, otherwise returns None
     """
     process = importer.data["processes"][parent_id]
-    # find match between target id and flow id
-    exchange = next(ex for ex in process["exchanges"] if ex.get("flow", {}).get("@id") == target_id)
+
+    # Find the input exchange with the matching flow ID
+    try:
+        exchange = next(
+            ex for ex in process["exchanges"]
+            if ex.get("input") and ex.get("flow", {}).get("@id") == target_id
+        )
+    except StopIteration:
+        # No matching input exchange found
+        return {
+            "parentProcessID": parent_id,
+            "targetID": target_id,
+            "error": "No matching input exchange found for target flow ID"
+        }
+
     default_provider = exchange.get("defaultProvider", {})
-    if not all(isinstance(default_provider.get(k), str) and default_provider.get(k) for k in ["@id", "name", "category", "flowType"]):
+    required_keys = ["@id", "name", "category", "flowType"]
+
+    if not all(isinstance(default_provider.get(k), str) and default_provider.get(k) for k in required_keys):
+        flow = exchange.get("flow", {})
+        return {
+            "parentProcessID": parent_id,
+            "targetID": target_id,
+            "targetName": flow.get("name"),
+            "targetCat": flow.get("category"),
+            "targetFT": flow.get("flowType"),
+            "error": "Malformed or missing defaultProvider metadata"
+        }
+
+    return None
+'''
+
+def check_default_provider_exists(parent_id, target_id, importer):
+    """
+    Checks whether the input exchange with the given flow ID contains a 'defaultProvider' dictionary.
+    Returns an error dictionary if not found, otherwise returns None.
+    """
+    process = importer.data["processes"][parent_id]
+
+    try:
+        exchange = next(
+            ex for ex in process["exchanges"]
+            if ex.get("input") and ex.get("flow", {}).get("@id") == target_id
+        )
+    except StopIteration:
+        return {
+            "parentProcessID": parent_id,
+            "targetID": target_id,
+            "error": "No matching input exchange found for target flow ID"
+        }
+
+    if "defaultProvider" not in exchange:
         flow = exchange.get("flow", {})
         return {
             "parentProcessID": parent_id,
@@ -229,7 +277,43 @@ def check_default_provider_dict(parent_id, target_id, importer):
             "targetCat": flow.get("category"),
             "targetFT": flow.get("flowType")
         }
+
     return None
+
+def validate_default_provider_metadata(parent_id, target_id, importer):
+    """
+    For each input exchange in the specified process, if a defaultProvider dictionary exists,
+    checks that it contains the required keys with string values.
+
+    Returns an error dictionary if validation fails, otherwise returns None.
+    """
+    process = importer.data["processes"][parent_id]
+    required_keys = ["@id", "name", "category", "flowType"]
+
+    for exchange in process.get("exchanges", []):
+        if not exchange.get("input"):
+            continue
+
+        flow = exchange.get("flow", {})
+        if flow.get("@id") != target_id:
+            continue
+
+        default_provider = exchange.get("defaultProvider")
+        if default_provider is None:
+            continue  # Skip if no defaultProvider — not an error in this function
+
+        if not all(isinstance(default_provider.get(k), str) and default_provider.get(k) for k in required_keys):
+            return {
+                "parentProcessID": parent_id,
+                "targetID": target_id,
+                "targetName": flow.get("name"),
+                "targetCat": flow.get("category"),
+                "targetFT": flow.get("flowType")
+            }
+
+    return None
+
+
 
 def check_provider_exists(parent_id, target_id, importer):
     """
@@ -347,6 +431,7 @@ def check_default_providers(importer, output_path, debug=False):
     Error checking function. Calls helper functions to identify issues with 'defaultProvider' dictionaries.
     """
     error_dicts = {
+        "missingDefaultPrvDict":[],
         "issueWithFlowPrvMetadata": [],
         "noMatchPrvToExc": [],
         "noMatchExcInFoundPrv": [],
@@ -359,6 +444,7 @@ def check_default_providers(importer, output_path, debug=False):
     skipped_exchanges = 0
     malformed_flows = 0
     malformed_providers = 0
+    missing_provider_dict = 0
 
     for parentProcessID, process in importer.data.get("processes", {}).items():
         total_processes += 1
@@ -379,7 +465,13 @@ def check_default_providers(importer, output_path, debug=False):
             total_exchanges_checked += 1
             targetID = flow.get("@id")
 
-            error = check_default_provider_dict(parentProcessID, targetID, importer)
+            error = check_default_provider_exists(parentProcessID, targetID, importer)
+            if error:
+                missing_provider_dict += 1
+                error_dicts["missingDefaultPrvDict"].append(error)
+                continue
+
+            error = validate_default_provider_metadata(parentProcessID, targetID, importer)
             if error:
                 malformed_providers += 1
                 error_dicts["issueWithFlowPrvMetadata"].append(error)
@@ -401,14 +493,15 @@ def check_default_providers(importer, output_path, debug=False):
                 continue
 
     if debug:
-        print("🔍 Debug Summary:")
-        print(f"Total processes checked: {total_processes}")
-        print(f"Total exchanges checked: {total_exchanges_checked}")
-        print(f"Total exchanges that are not dictionaries: {exch_not_dict}")
-        print(f"Skipped exchanges (not input): {skipped_exchanges}")
-        print(f"Malformed flow entries: {malformed_flows}")
-        print(f"Malformed defaultProvider entries: {malformed_providers}")
-        print("✅ Debug summary complete.")
+        log.info("Debug Summary:")
+        log.info(f"Total processes checked: {total_processes}")
+        log.info(f"Total exchanges checked: {total_exchanges_checked}")
+        log.info(f"Total exchanges that are not dictionaries: {exch_not_dict}")
+        log.info(f"Skipped exchanges (not input): {skipped_exchanges}")
+        log.info(f"Malformed flow entries: {malformed_flows}")
+        log.info(f"Exchanges with missing defaultProvider dict: {missing_provider_dict}")
+        log.info(f"Number of defaultProvider dicts with entry errors: {malformed_providers}")
+        log.info("Debug summary complete.")
 
     write_provider_errors(error_dicts, output_path)
 
