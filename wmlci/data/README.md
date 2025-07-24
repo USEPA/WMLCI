@@ -17,7 +17,7 @@ sourceData are stored as zip files on [USEPA's Data Commons](https://dmap-data-c
      - Download location: https://www.lcacommons.gov/lca-collaboration/National_Renewable_Energy_Laboratory/USLCI_Database_Public/datasets?commitId=978870b1695caa9519f55aa5904dfd348a823623
 
 
-4. USLCI Q2 2025 merged library.zip
+4. USLCI_Q2_2025_elci_merged.zip
    - Created internally at Eastern Research 
    - This is the exported database created by merging the following and exporting as a JSON-LD:
      -  USLCI v.1_2025_06_0 
