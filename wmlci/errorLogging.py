@@ -25,7 +25,7 @@ def print_avoided_input_uuids(jsonld):
     Parameters:
         jsonld (JSONLDImporter): An initialized JSONLDImporter object with data loaded.
     """
-    log.info("\nChecking for avoided products used as inputs\n")
+    log.info("\nChecking for avoided products used as inputs...\n")
     for pid, process in jsonld.data.get("processes", {}).items():
         if process.get("input"):
             for exc in process.get("exchanges", []):
@@ -41,14 +41,14 @@ def find_missing_unit_group_id(ug_id, jsonld):
     :param jsonld:
     :return:
     """
-    print("🔍 Scanning processes for unit group issues...\n")
+    log.info("\nScanning processes for unit group issues...\n")
     for pid, process in jsonld.data.get("processes", {}).items():
         for exc in process.get("exchanges", []):
             unit = exc.get("unit", {})
             if isinstance(unit, dict) and unit.get("@id") == ug_id:
-                print(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc}")
-                print("-" * 60)
-    return "\n✅ Search for unit group id issues is complete."
+                log.info(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc}")
+                log.info("-" * 60)
+    return log.info("\n✅ Search for unit group id issues is complete.")
 
 def find_production_exchange_errors(jsonld):
     """
@@ -62,7 +62,7 @@ def find_production_exchange_errors(jsonld):
     :param jsonld:
     :return:
     """
-    print("🔍 Scanning processes for production exchange issues...\n")
+    log.info("\nScanning processes for production exchange issues...\n")
     for process_id, process in jsonld.data.get("processes", {}).items():
         if process.get("type") in {"emission", "product"}:
             continue
@@ -72,16 +72,16 @@ def find_production_exchange_errors(jsonld):
             if exc.get("flow", {}).get("flowType") == "PRODUCT_FLOW" and not exc.get("isInput")
         ]
         if len(production_exchanges) != 1:
-            print(f"⚠️  Problem in activity: {process.get('name', 'Unnamed')} (ID: {process_id})")
-            print(f"Found {len(production_exchanges)} production exchanges:")
+            log.info(f"Problem in activity: {process.get('name', 'Unnamed')} (ID: {process_id})")
+            log.info(f"Found {len(production_exchanges)} production exchanges:")
             for exc in production_exchanges:
                 flow_name = exc.get("flow", {}).get("name", "Unknown")
                 is_input = exc.get("isInput")
-                print(f"  - Flow: {flow_name}, isInput: {is_input}")
-            print("-" * 60)
+                log.info(f"  - Flow: {flow_name}, isInput: {is_input}")
+            log.info("-" * 60)
         else:
             process["unit"] = production_exchanges[0]["unit"]
-    return "\n✅ Search for production exchange issues is complete."
+    return log.info("\nSearch for production exchange issues is complete.")
 
 def find_location_issues(jsonld):
     """
@@ -94,7 +94,7 @@ def find_location_issues(jsonld):
     :param jsonld:
     :return:
     """
-    print("🔍 Scanning processes for location issues...\n")
+    log.info("Scanning processes for location issues...\n")
     for process_id, process in jsonld.data.get("processes", {}).items():
         if process.get("type") in {"emission", "product"}:
             continue
@@ -143,9 +143,9 @@ def find_faulty_allocation_factors(jsonld):
                     "factor_index": idx
                 })
 
-    print("📋 Summary of faulty processes:")
+    log.info("Summary of faulty processes:")
     for entry in faulty_processes:
-        print(
+        log.info(
             f"- Process ID: {entry['process_id']}, "
             f"Allocation Type: {entry['allocation_type']}, "
             f"Missing: {', '.join(entry['missing_components'])}, "
@@ -183,7 +183,7 @@ def find_unallocatable_processes(jsonld):
                         product = factor["product"]["@id"]
                         flow = factor["exchange"]["flow"]["@id"]
                     except KeyError:
-                        print(f"Skipping malformed CAUSAL_ALLOCATION in process {process_id}")
+                        log.info(f"Skipping malformed CAUSAL_ALLOCATION in process {process_id}")
                         continue
                     if product not in allocation_dict["CAUSAL_ALLOCATION"]:
                         allocation_dict["CAUSAL_ALLOCATION"][product] = {}
@@ -193,61 +193,19 @@ def find_unallocatable_processes(jsonld):
                     if product:
                         allocation_dict[allocation_type][product] = factor["value"]
         except Exception as e:
-            print(f"Error processing allocation factors in process {process_id}: {e}")
+            log.info(f"Error processing allocation factors in process {process_id}: {e}")
             continue
         default_method = process.get("defaultAllocationMethod")
         if default_method and default_method not in allocation_dict:
-            print(f"❌ Unallocatable process: {process_id}")
-            print(f"   Name: {process.get('name', 'Unnamed')}")
-            print(f"   Default method: {default_method}")
-            print(f"   Available methods: {list(allocation_dict.keys())}")
-            print("-" * 60)
+            log.info(f"Unallocatable process: {process_id}")
+            log.info(f"   Name: {process.get('name', 'Unnamed')}")
+            log.info(f"   Default method: {default_method}")
+            log.info(f"   Available methods: {list(allocation_dict.keys())}")
+            log.info("-" * 60)
 
 ##########################################
 ### Find issues with default providers ###
 ##########################################
-'''
-def check_default_provider_dict(parent_id, target_id, importer):
-    """
-    Checks the following:
-    - defaultProvider dictionary within exchange exists
-    - Checks that the four target keys exist within the defaultProvider dictionary
-    - Checks that the keys are populated with a string type value
-
-    Returns error dictionary if any of these fail, otherwise returns None
-    """
-    process = importer.data["processes"][parent_id]
-
-    # Find the input exchange with the matching flow ID
-    try:
-        exchange = next(
-            ex for ex in process["exchanges"]
-            if ex.get("input") and ex.get("flow", {}).get("@id") == target_id
-        )
-    except StopIteration:
-        # No matching input exchange found
-        return {
-            "parentProcessID": parent_id,
-            "targetID": target_id,
-            "error": "No matching input exchange found for target flow ID"
-        }
-
-    default_provider = exchange.get("defaultProvider", {})
-    required_keys = ["@id", "name", "category", "flowType"]
-
-    if not all(isinstance(default_provider.get(k), str) and default_provider.get(k) for k in required_keys):
-        flow = exchange.get("flow", {})
-        return {
-            "parentProcessID": parent_id,
-            "targetID": target_id,
-            "targetName": flow.get("name"),
-            "targetCat": flow.get("category"),
-            "targetFT": flow.get("flowType"),
-            "error": "Malformed or missing defaultProvider metadata"
-        }
-
-    return None
-'''
 
 def check_default_provider_exists(parent_id, target_id, importer):
     """
@@ -313,8 +271,6 @@ def validate_default_provider_metadata(parent_id, target_id, importer):
 
     return None
 
-
-
 def check_provider_exists(parent_id, target_id, importer):
     """
     Checks that there is a matching process in the importer for the target exchange being checked.
@@ -333,7 +289,6 @@ def check_provider_exists(parent_id, target_id, importer):
             "targetPrvCat": default_provider.get("category")
         }
     return None
-
 
 def provider_lacks_target_exchange(parent_id, target_id, importer):
     """
@@ -567,7 +522,7 @@ def clean_all_locations(jsonld):
     for product in jsonld.products:
         clean_entry(product, "PRODUCT")
 
-    print(f"✅ Total entries' location fixed: {count_fixed}")
+    log.info(f"Total entries' location fixed: {count_fixed}")
 
 def write_unlinked_flows_to_excel(importer, output_directory):
     """
@@ -668,4 +623,4 @@ def write_unlinked_flows_to_excel(importer, output_directory):
         df_process_with_unlinked.to_excel(writer, sheet_name="process_with_unlinked_exc", index=False)
         df_unique_process_unlinked.to_excel(writer, sheet_name="unique_process_unlinked_exc", index=False)
 
-    print(f"Excel file saved to: {output_path}")
+    log.info(f"Excel file saved to: {output_path}")

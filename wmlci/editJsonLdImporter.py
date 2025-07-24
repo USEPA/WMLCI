@@ -1,8 +1,7 @@
-from wmlci.wmlci_log import log
-
 from bw2io.importers.json_ld import JSONLDImporter
 
 from wmlci.wmlci_log import log
+
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
@@ -106,7 +105,7 @@ def apply_opposite_direction_approach(jsonld):
                     exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
                     flow["input"] = False  # make output
-                    flow["flowType"] = "PRODUCT_FLOW"  # make reference flow
+                    flow["flowType"] = "PRODUCT_FLOW"  # make product flow
     return jsonld
 
 def add_process_location(jsonld):
@@ -194,3 +193,4 @@ def remove_process_allocation_factors(jsonld):
             process.pop("allocationFactors", None)
 
     return jsonld
+

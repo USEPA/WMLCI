@@ -55,7 +55,7 @@ bd.projects.set_current("uslciCleaning")
 ## Set database and biosphere database names ##
 nameDB = 'uslci'
 pathLCIA = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\IPCC'
-path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\uslci_merge_test'
+path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\USLCI_Q2_2025_elci_merged'
 
 ## Import USLCI as JSON-LD
 #uslci = load_JSONLD_sourceData('USLCI Q2 2025 merged library', bw_database_name=nameDB)
