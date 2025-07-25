@@ -17,7 +17,7 @@ List of implemented fixes:
 
 # Repository
 from wmlci.common import *
-from wmlci.editJsonLdImporter import *
+from wmlci.editImporter import *
 from wmlci.errorLogging import *
 from wmlci.settings import datapath
 
@@ -68,14 +68,20 @@ uslci = JSONLDImporter(path, nameDB)
 ## Changing the key 'isInput' to 'input' ##
 uslci = correct_jsonld_input_key(uslci)  # BW expects the key 'input
 
-## Remove flows with categories matching those in the list below if they are inputs
-delCategories = ['Technosphere flows/CUTOFF Flows','Ecosystem Services']
-delete_flows_of_category(uslci,delCategories)
-
 ## Apply the Opposite Direction Approach ##
-# Converts treated waste flows (excl. CUTOFFs) to inputs into waste producing process
-# Default providers are waste treatment processes
 uslci = apply_opposite_direction_approach(uslci)
+
+## Remove process exchanges and products if their category is in the respective list
+delProcessCat = ['Technosphere flows/CUTOFF Flows','Ecosystem Services'] # Process exchange categories
+delete_input_flow_category(uslci,delProcessCat) # Delete input exchanges
+delete_output_flow_category(uslci,delProcessCat) # Delete output exchanges
+delProductCat = ['CUTOFF Flows', 'Ecosystem Services'] # Product categories
+delete_product_flow_category(uslci, delProductCat) # Delete products
+
+## Check for processes with no reference flow or outputs
+processes_with_no_outputs_or_ref_flow(uslci)
+
+
 
 ## Run default provider QA/QC ##
 # Save errors to spreadsheet at location defined in path

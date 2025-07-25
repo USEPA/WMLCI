@@ -145,4 +145,5 @@ def disaggregate_multifunctional_processes(jsonld):
     mf_processes = get_multifunctional_processes(jsonld)
     valid_processes, invalid_processes = validate_allocation_factors(jsonld, mf_processes,tolerance=0.01)
 
+
     return jsonld

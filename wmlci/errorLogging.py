@@ -203,6 +203,24 @@ def find_unallocatable_processes(jsonld):
             log.info(f"   Available methods: {list(allocation_dict.keys())}")
             log.info("-" * 60)
 
+def processes_with_no_outputs_or_ref_flow(importer):
+    """
+    Iterates through all processes in JSONLDImporter object.
+    Iterates through all exchanges in each process.
+    Returns process uuid if there is no quantitative reference or no outputs.
+    """
+    processes = importer.data.get("processes", {})
+
+    for pid, process in processes.items():
+        exchanges = process.get("exchanges", [])
+        has_output = any(exchange.get("input") is False for exchange in exchanges)
+        has_quant_ref = any(exchange.get("isQuantitativeReference") is True for exchange in exchanges)
+        if not has_output:
+            log.info(f"{pid}: no outputs")
+        if not has_quant_ref:
+            log.info(f"{pid}: no quantitative reference")
+
+
 ##########################################
 ### Find issues with default providers ###
 ##########################################
@@ -460,9 +478,9 @@ def check_default_providers(importer, output_path, debug=False):
 
     write_provider_errors(error_dicts, output_path)
 
-########################################################################################################################
-## Methods for working with unlinked edges
-########################################################################################################################
+##############################################
+## Methods for working with unlinked edges ###
+##############################################
 
 def clean_all_locations(jsonld):
     """

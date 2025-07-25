@@ -6,72 +6,116 @@ from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 
+####################################
+### Remove flows with no impacts ###
+####################################
 
-def delete_flows_of_category(importer, categories_to_delete):
+def delete_input_flow_category(importer, categories_to_delete):
     """
-    Deletes exchanges and flows from the importer based on matching flow categories.
+    Deletes input exchanges and flows from the importer based on matching flow categories,
+    excluding exchanges that have a 'defaultProvider' dictionary.
+    Does not delete input CUTOFF flows if they have a default provider assigned
 
     Parameters:
     - importer: JSONLDImporter object
     - categories_to_delete: list of category strings to match against flow categories
     """
-    flows_to_delete = set() # using a set so that only unique elements are stored
+    flows_to_delete = set()  # using a set so that only unique elements are stored
+
     # Loop through all processes and their exchanges
     for pid, process in importer.data.get("processes", {}).items():
         exchanges = process.get("exchanges", [])
         new_exchanges = []
         for exchange in exchanges:
-            if exchange.get("input") is True:
+            if exchange.get("input") is True: # target input exchanges
                 flow = exchange.get("flow", {})
                 category = flow.get("category")
-                if category in categories_to_delete:
+                # Do not store CUTOFF for deletion if the input exchange has a defaultProvider
+                has_default_provider = "defaultProvider" in exchange and isinstance(exchange["defaultProvider"], dict)
+                if category in categories_to_delete and not has_default_provider:
                     flow_id = flow.get("@id")
                     if flow_id:
                         flows_to_delete.add(flow_id)
                     continue  # Skip adding this exchange to new_exchanges
+            # Filtered exchanges
             new_exchanges.append(exchange)
         # Update the exchanges list after filtering
-        # Cant delete list items while iterating over them
-        # Replaces 'exchanges' excluding the entries we dont want
         process["exchanges"] = new_exchanges
-    # Delete the flows from the importer's flow dictionary
+    # Delete the flows from the importer flow dictionary
     flows = importer.data.get("flows", {})
     for fid in flows_to_delete:
         if fid in flows:
             del flows[fid]
-    log.info(f"Deleted {len(flows_to_delete)} flows and associated exchanges matching categories: {categories_to_delete}")
+    log.info(f"Deleted {len(flows_to_delete)} flows and associated exchanges matching categories: {categories_to_delete} (excluding those with defaultProvider)")
 
-def correct_jsonld_input_key(jsonld):
-    '''
-    fix for strategy json_ld_allocate_datasets() from strategies/json_ld.py
-    changes 'isInput' key in exchanges to 'input' in all exchanges within processes
-    :param jsonld:
-    :return:
-    '''
-    for process_key, process in jsonld.data.get("processes", {}).items():
-        for exc in process.get("exchanges", []):
-            if "isInput" in exc:
-                exc["input"] = exc.pop("isInput")
-    return jsonld
 
-def edit_non_quant_ref_flow_type(jsonld):
-    '''
-    fix for strategy json_ld_add_activity_unit() from strategies/json_ld.py
-    changing flowType for any PRODUCT_FLOW that isn't the quantitative reference to TECHNOSPHERE_FLOW
-    this must be done to avoid "Failed Allocation" assertion error when multiple exchanges have a flowType of PRODUCT_FLOW
-    :param jsonld:
-    :return:
-    '''
-    for process_id, process in jsonld.data.get("processes", {}).items():
+def delete_output_flow_category(importer, categories_to_delete):
+    """
+    Deletes output exchanges and flows from the importer based on matching flow categories.
+    Will not delete the exchange if 'isQuantitativeReference' = True
+    - This is required for USLCI to USEEIO bridge processes that use cutoffs as outputs
+
+    Parameters:
+    - importer: JSONLDImporter object
+    - categories_to_delete: list of category strings to match against flow categories
+    """
+    flows_to_delete = set()  # using a set to store unique flow IDs
+    # Loop through all processes and their exchanges
+    for pid, process in importer.data.get("processes", {}).items():
         exchanges = process.get("exchanges", [])
+        new_exchanges = []
         for exchange in exchanges:
-            # Skip the reference flow
-            if exchange.get("isQuantitativeReference", False):
-                continue
-            flow = exchange.get("flow", {})
-            if isinstance(flow, dict) and flow.get("flowType") == "PRODUCT_FLOW" and not flow.get("input"):
-                flow["flowType"] = "TECHNOSPHERE_FLOW"
-    return jsonld
+            if exchange.get("input") is False:  # target output exchanges
+                flow = exchange.get("flow", {})
+                category = flow.get("category")
+                # Will not store uuid if the exchange is the quantitative reference
+                if category in categories_to_delete and exchange.get("isQuantitativeReference") != True:
+                    flow_id = flow.get("@id")
+                    if flow_id:
+                        flows_to_delete.add(flow_id)
+                    continue  # Skip adding this exchange to new_exchanges
+            # Filtered exchanges
+            new_exchanges.append(exchange)
+        # Update the exchanges list after filtering
+        process["exchanges"] = new_exchanges
+    # Delete the flows from the importer flow dictionary
+    flows = importer.data.get("flows", {})
+    for fid in flows_to_delete:
+        if fid in flows:
+            del flows[fid]
+    log.info(f"Deleted {len(flows_to_delete)} output flows and associated exchanges matching categories: {categories_to_delete}")
+
+def delete_product_flow_category(importer, categories_to_delete):
+    """
+    Deletes products from importer.products based on matching categories,
+    and removes associated flows from importer.data["flows"] using product 'code' as '@id'.
+
+    Parameters:
+    - importer: JSONLDImporter object
+    - categories_to_delete: list of category strings to match against product categories
+    """
+    uuids_to_delete = set()
+    new_products = []
+    for product in importer.products:
+        product_categories = product.get("categories", [])
+        if any(category in categories_to_delete for category in product_categories):
+            code = product.get("code")
+            if code:
+                uuids_to_delete.add(code)
+            continue  # Skip this product (i.e., delete it)
+        new_products.append(product)
+    # Replace products with filtered products list
+    importer.products = new_products
+    # Delete flows from importer.data["flows"] where the flow's '@id' is in codes_to_delete
+    flows = importer.data.get("flows", {})
+    for fid in list(flows):  # list() to avoid modifying dict during iteration
+        if flows[fid].get("@id") in uuids_to_delete:
+            del flows[fid]
+    log.info(f"Deleted {len(uuids_to_delete)} products and associated flows matching categories: {categories_to_delete}")
+
+###################################
+### Opposite direction approach ###
+###################################
 
 def apply_opposite_direction_approach(jsonld):
     '''
@@ -97,16 +141,22 @@ def apply_opposite_direction_approach(jsonld):
                 continue
             else:
                 # Edit waste outputs from processes that are inputs to waste treatment
-                if flow.get("flowType") == 'WASTE_FLOW' and not exchange.get("input"):
+                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("input") == False:
                     exchange["amount"] *= -1  # make value negative
                     flow["input"] = True  # make input
+                    exchange["input"] = True # make input
                 # Edit waste input to waste treatment
-                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("input"):
+                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("input") == True:
                     exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
                     flow["input"] = False  # make output
+                    exchange["input"] = False  # make output
                     flow["flowType"] = "PRODUCT_FLOW"  # make product flow
     return jsonld
+
+###########################
+### Fix location issues ###
+###########################
 
 def add_process_location(jsonld):
     """
@@ -170,6 +220,9 @@ def fix_exchange_locations(jsonld):
     print(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
     return jsonld
 
+###########################
+### Miscellaneous fixes ###
+###########################
 
 def remove_process_allocation_factors(jsonld):
     """
@@ -194,3 +247,15 @@ def remove_process_allocation_factors(jsonld):
 
     return jsonld
 
+def correct_jsonld_input_key(jsonld):
+    '''
+    fix for strategy json_ld_allocate_datasets() from strategies/json_ld.py
+    changes 'isInput' key in exchanges to 'input' in all exchanges within processes
+    :param jsonld:
+    :return:
+    '''
+    for process_key, process in jsonld.data.get("processes", {}).items():
+        for exc in process.get("exchanges", []):
+            if "isInput" in exc:
+                exc["input"] = exc.pop("isInput")
+    return jsonld
