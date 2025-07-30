@@ -6,108 +6,118 @@ from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 
-####################################
-### Remove flows with no impacts ###
-####################################
+from typing import Dict, Set
 
-def delete_input_flow_category(importer, categories_to_delete):
+######################################################
+### Remove exchanges and processes with no impacts ###
+######################################################
+
+def remove_impact_free_objects(importer) -> None:
     """
-    Deletes input exchanges and flows from the importer based on matching flow categories,
-    excluding exchanges that have a 'defaultProvider' dictionary.
-    Also removes products from importer.products whose 'code' matches deleted flow IDs.
+    Recursively identifies and removes exchanges and processes that have no environmental impacts.
+
+    A process is considered impact-free if:
+    - It has no output exchanges that are elementary flows.
+    - All its input exchanges either:
+        - Have no default provider, or
+        - Reference other processes that are also impact-free.
+
+    The function modifies the input `data` dictionary in-place by:
+    - Removing exchanges from processes that are impact-free.
+    - Removing processes that are impact-free and no longer referenced.
 
     Parameters:
-    - importer: JSONLDImporter object
-    - categories_to_delete: list of category strings to match against flow categories
+    - data (dict): A dictionary containing a 'processes' key with process definitions.
+
+    Returns:
+    - None
     """
-    flows_to_delete = set()   # using a set to store unique flow IDs
-    deleted_exchange_count = 0
-    # Loop through all processes and their exchanges
-    for pid, process in importer.data.get("processes", {}).items():
-        exchanges = process.get("exchanges", [])
-        new_exchanges = []
-        for exchange in exchanges:
-            if exchange.get("input") is True: # target input exchanges
-                flow = exchange.get("flow", {})
-                category = flow.get("category")
-                has_default_provider = "defaultProvider" in exchange and isinstance(exchange["defaultProvider"], dict)
-                # Remove if category matches and no default provider is included
-                if category in categories_to_delete and not has_default_provider:
-                    flow_id = flow.get("@id")
-                    if flow_id:
-                        flows_to_delete.add(flow_id)
-                    deleted_exchange_count += 1
-                    continue
-            new_exchanges.append(exchange) # Filtered exchanges
-        process["exchanges"] = new_exchanges # Update the exchanges list after filtering
-    # Delete the flows from the importer flow dictionary
-    flows = importer.data.get("flows", {})
-    deleted_flow_count = 0
-    for fid in flows_to_delete:
-        if fid in flows:
-            del flows[fid]
-            deleted_flow_count += 1
-    # Remove matching products from importer.products
-    original_product_count = len(importer.products)
-    importer.products = [
-        product for product in importer.products
-        if product.get("code") not in flows_to_delete
-    ]
-    deleted_product_count = original_product_count - len(importer.products)
+    process_dict_by_id = importer.data.get('processes', {}) # Get the dictionary of all processes by their unique ID
+    impact_free_status_by_id = {} # Cache to store whether each process is impact-free (True/False)
+    all_referenced_provider_ids = set() # Set to track all process IDs that are referenced as default providers
+    exchange_removal_count = 0 # Counter for removed exchanges
+    process_removal_count = 0 # Counter for removed processes
 
-    log.info(f"Deleted {deleted_exchange_count} input exchanges matching categories: {categories_to_delete} (excluding those with defaultProvider)")
-    log.info(f"Deleted {deleted_flow_count} flows associated with those exchanges")
-    log.info(f"Deleted {deleted_product_count} products with codes matching deleted flows")
+    def check_if_process_is_impact_free(target_process_id: str, visited_process_ids: Set[str]) -> bool:
+        """
+        Recursively determines if a process is impact-free.
 
-def delete_output_flow_category(importer, categories_to_delete):
-    """
-    Deletes output exchanges and flows from the importer based on matching flow categories.
-    Will not delete the exchange if 'isQuantitativeReference' = True.
-    Also removes products from importer.products whose 'code' matches deleted flow IDs.
+        Parameters:
+        - target_process_id (str): The ID of the process to evaluate.
+        - visited_process_ids (set): Set of process IDs visited in the current recursion stack to avoid cycles.
 
-    Parameters:
-    - importer: JSONLDImporter object
-    - categories_to_delete: list of category strings to match against flow categories
-    """
-    flows_to_delete = set()   # using a set to store unique flow IDs
-    deleted_exchange_count = 0
-    # Loop through all processes and their exchanges
-    for pid, process in importer.data.get("processes", {}).items():
-        exchanges = process.get("exchanges", [])
-        new_exchanges = []
-        for exchange in exchanges:
-            if exchange.get("input") is False:  # target output exchanges
-                flow = exchange.get("flow", {})
-                category = flow.get("category")
-                # Will not store uuid if the exchange is the quantitative reference
-                if category in categories_to_delete and exchange.get("isQuantitativeReference") != True:
-                    flow_id = flow.get("@id")
-                    if flow_id:
-                        flows_to_delete.add(flow_id)
-                    deleted_exchange_count += 1
-                    continue
-            new_exchanges.append(exchange) # Filtered exchanges
-        process["exchanges"] = new_exchanges # Update the exchanges list after filtering
+        Returns:
+        - bool: True if the process is impact-free, False otherwise.
+        """
+        # If this process has already been evaluated, return the cached result
+        if target_process_id in impact_free_status_by_id:
+            return impact_free_status_by_id[target_process_id]
+        # If this process is already in the current recursion stack, assume it's impact-free to avoid infinite loops
+        if target_process_id in visited_process_ids:
+            return True
+        visited_process_ids.add(target_process_id) # Mark this process as visited
+        # Get the process data and its exchanges
+        target_process_data = process_dict_by_id.get(target_process_id, {})
+        target_process_exchanges = target_process_data.get('exchanges', [])
+        # Check if the process has any output exchange that is an elementary flow
+        for exchange_out in target_process_exchanges:
+            # If the exchange is an output and its flow type is ELEMENTARY_FLOW, the process has impacts
+            if not exchange_out.get('input') and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
+                impact_free_status_by_id[target_process_id] = False
+                return False
+        # Check all input exchanges for default providers
+        for exchange_in in target_process_exchanges:
+            # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference another process
+            if exchange_in.get('input') and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+                input_default_provider = exchange_in.get('defaultProvider')
+                # If the exchange has a default provider, we need to check if that provider has impacts
+                if input_default_provider:
+                    input_provider_process_id = input_default_provider.get('@id')
+                    # Track that this provider is referenced
+                    all_referenced_provider_ids.add(input_provider_process_id)
+                    # If the provider process is not impact-free, then this process is not impact-free
+                    if not check_if_process_is_impact_free(input_provider_process_id, visited_process_ids):
+                        impact_free_status_by_id[target_process_id] = False
+                        return False
+        # If no impacts found, mark this process as impact-free
+        impact_free_status_by_id[target_process_id] = True
+        return True
 
-    # Delete the flows from the importer flow dictionary
-    flows = importer.data.get("flows", {})
-    deleted_flow_count = 0
-    for fid in flows_to_delete:
-        if fid in flows:
-            del flows[fid]
-            deleted_flow_count += 1
+    # Pass 1: Evaluate all processes and cache their impact-free status
+    for process_id_to_check in list(process_dict_by_id.keys()):
+        check_if_process_is_impact_free(process_id_to_check, set())
 
-    # Delete the products from the importer.products list
-    original_product_count = len(importer.products)
-    importer.products = [
-        product for product in importer.products
-        if product.get("code") not in flows_to_delete
-    ]
-    deleted_product_count = original_product_count - len(importer.products)
+    # Pass 2: Remove input exchanges that reference impact-free providers
+    for process_id_to_clean, process_data_to_clean in process_dict_by_id.items():
+        retained_exchanges = []
+        for exchange_to_check in process_data_to_clean.get('exchanges', []):
+            # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference a provider
+            if exchange_to_check.get('input') and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+                provider_info_to_check = exchange_to_check.get('defaultProvider')
+                # If the exchange has a default provider, check if it's impact-free
+                if provider_info_to_check:
+                    provider_id_to_check = provider_info_to_check.get('@id')
+                    # If the provider is impact-free, skip this exchange
+                    if impact_free_status_by_id.get(provider_id_to_check, False):
+                        log.info(f"Removing exchange from process '{process_id_to_clean}' because its provider '{provider_id_to_check}' is impact-free.")
+                        exchange_removal_count += 1
+                        continue
+            # Keep the exchange if not removed
+            retained_exchanges.append(exchange_to_check)
+        # Update the process with the filtered list of exchanges
+        process_data_to_clean['exchanges'] = retained_exchanges
 
-    log.info(f"Deleted {deleted_exchange_count} output exchanges matching categories: {categories_to_delete} (excluding quantitative references)")
-    log.info(f"Deleted {deleted_flow_count} flows associated with those exchanges")
-    log.info(f"Deleted {deleted_product_count} products with codes matching deleted flows")
+    # Pass 3: Remove processes that are impact-free and not referenced by any other process
+    for process_id_to_remove in list(process_dict_by_id.keys()):
+        # If the process is impact-free and not referenced by any other process, delete it
+        if impact_free_status_by_id.get(process_id_to_remove, False) and process_id_to_remove not in all_referenced_provider_ids:
+            log.info(f"Removing process '{process_id_to_remove}' because it is impact-free and unreferenced.")
+            process_removal_count += 1
+            del process_dict_by_id[process_id_to_remove]
+
+    # Final summary of removals
+    log.info(f"Total exchanges removed: {exchange_removal_count}")
+    log.info(f"Total processes removed: {process_removal_count}")
 
 ###################################
 ### Opposite direction approach ###

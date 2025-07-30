@@ -71,10 +71,8 @@ uslci = correct_jsonld_input_key(uslci)  # BW expects the key 'input
 ## Apply the Opposite Direction Approach ##
 uslci = apply_opposite_direction_approach(uslci)
 
-## Remove process exchanges and products if their category is in the respective list
-delExchCat = ['Technosphere flows/CUTOFF Flows','Ecosystem Services'] # Process exchange categories
-delete_input_flow_category(uslci,delExchCat) # Delete input exchanges
-delete_output_flow_category(uslci,delExchCat) # Delete output exchanges
+## Remove exchanges and processes with no impacts ##
+remove_impact_free_objects(uslci)
 
 ## Check for processes with no reference flow or outputs
 processes_with_no_outputs_or_ref_flow(uslci)
