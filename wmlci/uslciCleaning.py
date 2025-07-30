@@ -58,8 +58,8 @@ pathLCIA = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders
 path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\USLCI_Q2_2025_elci_merged'
 
 ## Import USLCI as JSON-LD
-#uslci = load_JSONLD_sourceData('USLCI Q2 2025 merged library', bw_database_name=nameDB)
-uslci = JSONLDImporter(path, nameDB)
+#uslci = load_JSONLD_sourceData('USLCI_Q2_2025_elci_merged', bw_database_name=nameDB)
+uslci = JSONLDImporter(path, nameDB, preferred_allocation="PHYSICAL_ALLOCATION")
 
 ###################################################################################
 ### Run debugging and cleaning functions such that apply_strategies() will work ###
@@ -72,16 +72,12 @@ uslci = correct_jsonld_input_key(uslci)  # BW expects the key 'input
 uslci = apply_opposite_direction_approach(uslci)
 
 ## Remove process exchanges and products if their category is in the respective list
-delProcessCat = ['Technosphere flows/CUTOFF Flows','Ecosystem Services'] # Process exchange categories
-delete_input_flow_category(uslci,delProcessCat) # Delete input exchanges
-delete_output_flow_category(uslci,delProcessCat) # Delete output exchanges
-delProductCat = ['CUTOFF Flows', 'Ecosystem Services'] # Product categories
-delete_product_flow_category(uslci, delProductCat) # Delete products
+delExchCat = ['Technosphere flows/CUTOFF Flows','Ecosystem Services'] # Process exchange categories
+delete_input_flow_category(uslci,delExchCat) # Delete input exchanges
+delete_output_flow_category(uslci,delExchCat) # Delete output exchanges
 
 ## Check for processes with no reference flow or outputs
 processes_with_no_outputs_or_ref_flow(uslci)
-
-
 
 ## Run default provider QA/QC ##
 # Save errors to spreadsheet at location defined in path
@@ -92,8 +88,6 @@ check_default_providers(uslci, errorPath, debug=True)
 uslci = add_process_location(uslci) # Add default 'United States' location when process is missing location attribute
 uslci = fix_exchange_locations(uslci) # For exchanges missing location, inherit parent process location data
 
-## Temp fix where there is >1 'PRODUCT_FLOW' per process ##
-uslci = edit_non_quant_ref_flow_type(uslci) # change output exchanges that are not ref flow to TECHNOSPHERE_FLOW
 
 ## Apply strategies ##
 uslci.apply_strategies()

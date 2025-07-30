@@ -14,14 +14,14 @@ def delete_input_flow_category(importer, categories_to_delete):
     """
     Deletes input exchanges and flows from the importer based on matching flow categories,
     excluding exchanges that have a 'defaultProvider' dictionary.
-    Does not delete input CUTOFF flows if they have a default provider assigned
+    Also removes products from importer.products whose 'code' matches deleted flow IDs.
 
     Parameters:
     - importer: JSONLDImporter object
     - categories_to_delete: list of category strings to match against flow categories
     """
-    flows_to_delete = set()  # using a set so that only unique elements are stored
-
+    flows_to_delete = set()   # using a set to store unique flow IDs
+    deleted_exchange_count = 0
     # Loop through all processes and their exchanges
     for pid, process in importer.data.get("processes", {}).items():
         exchanges = process.get("exchanges", [])
@@ -30,36 +30,47 @@ def delete_input_flow_category(importer, categories_to_delete):
             if exchange.get("input") is True: # target input exchanges
                 flow = exchange.get("flow", {})
                 category = flow.get("category")
-                # Do not store CUTOFF for deletion if the input exchange has a defaultProvider
                 has_default_provider = "defaultProvider" in exchange and isinstance(exchange["defaultProvider"], dict)
+                # Remove if category matches and no default provider is included
                 if category in categories_to_delete and not has_default_provider:
                     flow_id = flow.get("@id")
                     if flow_id:
                         flows_to_delete.add(flow_id)
-                    continue  # Skip adding this exchange to new_exchanges
-            # Filtered exchanges
-            new_exchanges.append(exchange)
-        # Update the exchanges list after filtering
-        process["exchanges"] = new_exchanges
+                    deleted_exchange_count += 1
+                    continue
+            new_exchanges.append(exchange) # Filtered exchanges
+        process["exchanges"] = new_exchanges # Update the exchanges list after filtering
     # Delete the flows from the importer flow dictionary
     flows = importer.data.get("flows", {})
+    deleted_flow_count = 0
     for fid in flows_to_delete:
         if fid in flows:
             del flows[fid]
-    log.info(f"Deleted {len(flows_to_delete)} flows and associated exchanges matching categories: {categories_to_delete} (excluding those with defaultProvider)")
+            deleted_flow_count += 1
+    # Remove matching products from importer.products
+    original_product_count = len(importer.products)
+    importer.products = [
+        product for product in importer.products
+        if product.get("code") not in flows_to_delete
+    ]
+    deleted_product_count = original_product_count - len(importer.products)
 
+    log.info(f"Deleted {deleted_exchange_count} input exchanges matching categories: {categories_to_delete} (excluding those with defaultProvider)")
+    log.info(f"Deleted {deleted_flow_count} flows associated with those exchanges")
+    log.info(f"Deleted {deleted_product_count} products with codes matching deleted flows")
 
 def delete_output_flow_category(importer, categories_to_delete):
     """
     Deletes output exchanges and flows from the importer based on matching flow categories.
-    Will not delete the exchange if 'isQuantitativeReference' = True
-    - This is required for USLCI to USEEIO bridge processes that use cutoffs as outputs
+    Will not delete the exchange if 'isQuantitativeReference' = True.
+    Also removes products from importer.products whose 'code' matches deleted flow IDs.
 
     Parameters:
     - importer: JSONLDImporter object
     - categories_to_delete: list of category strings to match against flow categories
     """
-    flows_to_delete = set()  # using a set to store unique flow IDs
+    flows_to_delete = set()   # using a set to store unique flow IDs
+    deleted_exchange_count = 0
     # Loop through all processes and their exchanges
     for pid, process in importer.data.get("processes", {}).items():
         exchanges = process.get("exchanges", [])
@@ -73,45 +84,30 @@ def delete_output_flow_category(importer, categories_to_delete):
                     flow_id = flow.get("@id")
                     if flow_id:
                         flows_to_delete.add(flow_id)
-                    continue  # Skip adding this exchange to new_exchanges
-            # Filtered exchanges
-            new_exchanges.append(exchange)
-        # Update the exchanges list after filtering
-        process["exchanges"] = new_exchanges
+                    deleted_exchange_count += 1
+                    continue
+            new_exchanges.append(exchange) # Filtered exchanges
+        process["exchanges"] = new_exchanges # Update the exchanges list after filtering
+
     # Delete the flows from the importer flow dictionary
     flows = importer.data.get("flows", {})
+    deleted_flow_count = 0
     for fid in flows_to_delete:
         if fid in flows:
             del flows[fid]
-    log.info(f"Deleted {len(flows_to_delete)} output flows and associated exchanges matching categories: {categories_to_delete}")
+            deleted_flow_count += 1
 
-def delete_product_flow_category(importer, categories_to_delete):
-    """
-    Deletes products from importer.products based on matching categories,
-    and removes associated flows from importer.data["flows"] using product 'code' as '@id'.
+    # Delete the products from the importer.products list
+    original_product_count = len(importer.products)
+    importer.products = [
+        product for product in importer.products
+        if product.get("code") not in flows_to_delete
+    ]
+    deleted_product_count = original_product_count - len(importer.products)
 
-    Parameters:
-    - importer: JSONLDImporter object
-    - categories_to_delete: list of category strings to match against product categories
-    """
-    uuids_to_delete = set()
-    new_products = []
-    for product in importer.products:
-        product_categories = product.get("categories", [])
-        if any(category in categories_to_delete for category in product_categories):
-            code = product.get("code")
-            if code:
-                uuids_to_delete.add(code)
-            continue  # Skip this product (i.e., delete it)
-        new_products.append(product)
-    # Replace products with filtered products list
-    importer.products = new_products
-    # Delete flows from importer.data["flows"] where the flow's '@id' is in codes_to_delete
-    flows = importer.data.get("flows", {})
-    for fid in list(flows):  # list() to avoid modifying dict during iteration
-        if flows[fid].get("@id") in uuids_to_delete:
-            del flows[fid]
-    log.info(f"Deleted {len(uuids_to_delete)} products and associated flows matching categories: {categories_to_delete}")
+    log.info(f"Deleted {deleted_exchange_count} output exchanges matching categories: {categories_to_delete} (excluding quantitative references)")
+    log.info(f"Deleted {deleted_flow_count} flows associated with those exchanges")
+    log.info(f"Deleted {deleted_product_count} products with codes matching deleted flows")
 
 ###################################
 ### Opposite direction approach ###
