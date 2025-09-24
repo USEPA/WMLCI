@@ -6,6 +6,8 @@ from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
 from wmlci.settings import paths, sourcedatapath
 from wmlci.wmlci_log import log
+from wmlci.editImporter import (correct_jsonld_input_key, add_process_location, remove_process_allocation_factors,
+                                apply_opposite_direction_approach)
 
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
@@ -94,5 +96,27 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     return jsonld
 
 
+def clean_JSONLD_sourceData(jsonld):
+    """
+    Apply standard cleaning functions after loading JSONLD data that address common issues in imported data.
+    This function should be run before bw apply_strategies().
+    :param fname:
+    :param datatype:
+    :param bw_database_name:
+    :return:
+    """
+    # todo: note that modifying isInput to input breaks warm openlca code
+    # change 'isInput' key in exchanges to 'input' as expected by BW
+    # jsonld = correct_jsonld_input_key(jsonld)
 
+    # Apply the Opposite Direction Approach
+    jsonld = apply_opposite_direction_approach(jsonld)
+
+    # append location where missing in jsonld for json_ld_location_name()
+    jsonld = add_process_location(jsonld)
+
+    # drop allocation factors of 1 due to missing exchange info causing error
+    jsonld = remove_process_allocation_factors(jsonld)
+
+    return jsonld
 
