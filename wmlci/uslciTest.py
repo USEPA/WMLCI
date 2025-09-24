@@ -112,7 +112,7 @@ clean_all_locations(uslci)
 ## Import LCIA Methods ##
 
 # Importing IPCC via the JSONLDLCIAImporter
-lciapath = sourcedatapath / 'IPCC'
+lciapath = sourcedatapath / 'IPCC_LCIA_methods_1.2024-12.0'
 IPCC = JSONLDLCIAImporter(lciapath)
 
 # Apply strategies to LCIA, evaluate linkages, match biosphere flows to characterization factors
