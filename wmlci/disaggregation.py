@@ -27,17 +27,23 @@ def get_multifunctional_processes(jsonld):
     - 'input' is False
     - 'flow.flowType' is 'PRODUCT_FLOW'
     """
+    # todo: check bw method for 'input' vs 'IsInput' vs 'isInput'
     multifunctional_process_uuids = []
 
     # Create a list of products for current process
-    for process in jsonld.data['processes']:
+    for process_id, process_data in jsonld.data['processes'].items():
+        # print(process_id)
+
         products = [
-            exc for exc in process.get('exchanges', [])
-            if not exc.get('input') and exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
+            exc for exc in process_data.get('exchanges', [])
+            if not exc.get('input') and
+               exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
         ]
+        # print(f"products for {process_id} are: {products}")
         # Go to next process if not multifunctional
         if len(products) > 1:
-            multifunctional_process_uuids.append(process.get('@id'))
+            log.info(f"{process_id} contains multifunctional processes that require further processing")
+            multifunctional_process_uuids.append(process_id)
 
     return multifunctional_process_uuids
 
@@ -71,16 +77,21 @@ def validate_allocation_factors(importer, multifunctional_process_uuids, toleran
         - invalid_processes : dict
             Dictionary mapping process UUIDs to reasons for validation failure.
     """
+    # todo: check bw method for 'input' vs 'IsInput' vs 'isInput'
     valid_processes = []
     invalid_processes = {}
     # Evaluate only multifunctional processes
-    for process in importer.data['processes']:
-        process_id = process.get('@id')
+    for process_id, process_data in importer.data['processes'].items():
+        # print(process_id)
         if process_id not in multifunctional_process_uuids:
             continue
 
-        allocation_method = process.get('defaultAllocationMethod')  # get default allocation method
-        allocation_factors = process.get('allocationFactors', [])  # get allocation factors
+        # get default allocation method
+        allocation_method = process_data.get('defaultAllocationMethod')
+        # print(f"allocation method is {allocation_method}")
+        # get allocation factors
+        allocation_factors = process_data.get('allocationFactors', [])
+        # print(allocation_factors)
 
         # Map allocation factors by product ID
         allocation_map = {
@@ -89,8 +100,9 @@ def validate_allocation_factors(importer, multifunctional_process_uuids, toleran
         }
         # Get product flows
         products = [
-            exc for exc in process.get('exchanges', [])
-            if not exc.get('input') and exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
+            exc for exc in process_data.get('exchanges', [])
+            if not exc.get('input') and
+               exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
         ]
 
         # Check each allocation factor for each product
