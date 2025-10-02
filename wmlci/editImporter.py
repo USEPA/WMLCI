@@ -1,3 +1,7 @@
+"""
+Functions to clean up imported olca data and generate square technosphere matrix
+"""
+
 from bw2io.importers.json_ld import JSONLDImporter
 
 from wmlci.wmlci_log import log

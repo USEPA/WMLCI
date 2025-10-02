@@ -1,3 +1,7 @@
+"""
+Functions for locating where incompatibilities exist between olca json-ld and brightway.
+"""
+
 import pandas as pd
 from collections import defaultdict
 import os
@@ -15,9 +19,8 @@ from wmlci.wmlci_log import log
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
-"""
-Functions for locating where incompatibilities exist between olca json-ld and brightway.
-"""
+
+
 def print_avoided_input_uuids(jsonld):
     """
     Prints the UUIDs of processes and exchanges where avoided products are used as inputs.
@@ -32,6 +35,7 @@ def print_avoided_input_uuids(jsonld):
                 if exc.get("isAvoidedProduct"):
                     log.info(f" Process UUID: {pid} -> Exchange UUID: {exc.get('id')}")
     log.info("\n✅ Scan complete.")
+
 
 def find_missing_unit_group_id(ug_id, jsonld):
     """
@@ -49,6 +53,7 @@ def find_missing_unit_group_id(ug_id, jsonld):
                 log.info(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc}")
                 log.info("-" * 60)
     return log.info("\n✅ Search for unit group id issues is complete.")
+
 
 def find_production_exchange_errors(jsonld):
     """
@@ -83,6 +88,7 @@ def find_production_exchange_errors(jsonld):
             process["unit"] = production_exchanges[0]["unit"]
     return log.info("\nSearch for production exchange issues is complete.")
 
+
 def find_location_issues(jsonld):
     """
     search for processes and exchanges with missing location info
@@ -107,6 +113,7 @@ def find_location_issues(jsonld):
             print(f"  Location value: {location}")
             print("-" * 60)
     return "\n✅ Search for location issues is complete."
+
 
 def find_faulty_allocation_factors(jsonld):
     """
@@ -153,6 +160,7 @@ def find_faulty_allocation_factors(jsonld):
         )
 
     return faulty_processes
+
 
 def find_unallocatable_processes(jsonld):
     """
@@ -202,6 +210,7 @@ def find_unallocatable_processes(jsonld):
             log.info(f"   Default method: {default_method}")
             log.info(f"   Available methods: {list(allocation_dict.keys())}")
             log.info("-" * 60)
+
 
 def processes_with_no_outputs_or_ref_flow(importer):
     """
@@ -256,6 +265,7 @@ def check_default_provider_exists(parent_id, target_id, importer):
 
     return None
 
+
 def validate_default_provider_metadata(parent_id, target_id, importer):
     """
     For each input exchange in the specified process, if a defaultProvider dictionary exists,
@@ -289,6 +299,7 @@ def validate_default_provider_metadata(parent_id, target_id, importer):
 
     return None
 
+
 def check_provider_exists(parent_id, target_id, importer):
     """
     Checks that there is a matching process in the importer for the target exchange being checked.
@@ -307,6 +318,7 @@ def check_provider_exists(parent_id, target_id, importer):
             "targetPrvCat": default_provider.get("category")
         }
     return None
+
 
 def provider_lacks_target_exchange(parent_id, target_id, importer):
     """
@@ -328,6 +340,7 @@ def provider_lacks_target_exchange(parent_id, target_id, importer):
         "targetID": target_id,
         "foundPrvID": found_provider.get("@id")
     }
+
 
 def target_exchange_provider_output(parent_id, target_id, importer):
     """
@@ -353,6 +366,7 @@ def target_exchange_provider_output(parent_id, target_id, importer):
             break
 
     return None
+
 
 def write_provider_errors(error_dicts, output_path):
     """
@@ -398,6 +412,7 @@ def write_provider_errors(error_dicts, output_path):
 
     # Save the workbook
     wb.save(output_path)
+
 
 def check_default_providers(importer, output_path, debug=False):
     """
@@ -541,6 +556,7 @@ def clean_all_locations(jsonld):
         clean_entry(product, "PRODUCT")
 
     log.info(f"Total entries' location fixed: {count_fixed}")
+
 
 def write_unlinked_flows_to_excel(importer, output_directory):
     """

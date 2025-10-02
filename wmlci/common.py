@@ -1,3 +1,6 @@
+"""
+Functions common across datasets
+"""
 
 import zipfile
 
@@ -12,9 +15,7 @@ from wmlci.editImporter import (correct_jsonld_input_key, add_process_location, 
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
-"""
-Functions common across datasets
-"""
+
 
 def assign_uuid():
     """

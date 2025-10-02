@@ -1,9 +1,9 @@
+"""
+Disaggregate multifunctional processes
+"""
 
 from wmlci.wmlci_log import log
 
-##############################################
-### Disaggregate multifunctional processes ###
-##############################################
 
 def find_allocation_test_process(jsonld):
     # This function finds a relatively simple multifunctional process for testing purposes
