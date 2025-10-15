@@ -38,10 +38,10 @@ def print_avoided_input_uuids(jsonld):
     log.info("\n✅ Scan complete.")
 
 
-def find_missing_unit_group_id(ug_id, jsonld):
+def find_missing_unit_group_id(jsonld):
     """
     search for missing unit group uuid(s) in importer object
-    print process and exchange info for missing unit group id
+    print process and exchange info for missing unit group id (ug_id)
     :param ug_id:
     :param jsonld:
     :return:
@@ -50,8 +50,8 @@ def find_missing_unit_group_id(ug_id, jsonld):
     for pid, process in jsonld.data.get("processes", {}).items():
         for exc in process.get("exchanges", []):
             unit = exc.get("unit", {})
-            if isinstance(unit, dict) and unit.get("@id") == ug_id:
-                log.info(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc}")
+            if isinstance(unit, dict) and "@id" not in unit:
+                log.info(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc} - missing @id")
                 log.info("-" * 60)
     return log.info("\n✅ Search for unit group id issues is complete.")
 
@@ -382,12 +382,16 @@ def write_provider_errors(error_dicts, output_path):
     Returns:
     - None
     """
+    # define filepath
+    file_path = f"{output_path}.xlsx"
+
     # Ensure the file exists
-    if not os.path.exists(output_path):
-        raise FileNotFoundError(f"The file {output_path} does not exist.")
+    if not os.path.exists(file_path):
+        wb = openpyxl.Workbook()
+        wb.save(file_path)
 
     # Load the workbook
-    wb = openpyxl.load_workbook(output_path)
+    wb = openpyxl.load_workbook(file_path)
 
     # Retain only the 'Documentation' sheet
     for sheet in wb.sheetnames:
@@ -471,7 +475,7 @@ def check_default_providers(importer, output_path, debug=False):
                 error_dicts["noMatchPrvToExc"].append(error)
                 continue
 
-            errors = provider_lacks_target_exchange(parentProcessID, targetID, importer)
+            error = provider_lacks_target_exchange(parentProcessID, targetID, importer)
             if error:
                 error_dicts["noMatchExcInFoundPrv"].append(error)
                 continue
@@ -607,8 +611,8 @@ def write_unlinked_flows_to_excel(importer, output_directory):
     unique_process_set = set()
     unique_process_data = []
 
-    for ds in importer.data:
-        ds_type = ds.get("type")
+    for pid, ds in importer.data.get("processes", {}).items():
+        ds_type = ds.get("@type")
         ds_code = ds.get("code", "No code")
         ds_name = ds.get("name", "No name")
 
@@ -668,17 +672,12 @@ def check_for_errors_in_jsonld_import(jsonld):
     :return:
     """
     print_avoided_input_uuids(jsonld)
-    # find_missing_unit_group_id(ug_id, jsonld) # todo:need to define ug_id
+    find_missing_unit_group_id(jsonld)  # todo: confirm working as intended
     find_production_exchange_errors(jsonld)
     find_location_issues(jsonld)
     find_faulty_allocation_factors(jsonld)
     find_unallocatable_processes(jsonld)
     processes_with_no_outputs_or_ref_flow(jsonld)
-    # check_default_provider_exists(parent_id, target_id, importer) # todo: define terms
-    # validate_default_provider_metadata(parent_id, target_id, importer) # todo: define terms
-    # check_provider_exists(parent_id, target_id, importer)      # todo: define terms
-    # provider_lacks_target_exchange(parent_id, target_id, importer)    # todo: define terms
-    # target_exchange_provider_output(parent_id, target_id, importer)    # todo: define terms
-    # write_provider_errors(error_dicts, output_path)        # todo: define terms
-    # check_default_providers(importer, output_path, debug=False)      # todo: define terms
+    # todo: update the excel document name
+    check_default_providers(jsonld, wmlcioutputpath/"WMLCI_Error_Logging", debug=False)
     write_unlinked_flows_to_excel(jsonld, wmlcioutputpath)
