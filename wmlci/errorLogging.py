@@ -416,7 +416,7 @@ def write_provider_errors(error_dicts, output_path):
         ws.freeze_panes = "A2"
 
     # Save the workbook
-    wb.save(output_path)
+    wb.save(file_path)
 
 
 def check_default_providers(importer, output_path, debug=False):
@@ -480,21 +480,21 @@ def check_default_providers(importer, output_path, debug=False):
                 error_dicts["noMatchExcInFoundPrv"].append(error)
                 continue
 
-            errors = target_exchange_provider_output(parentProcessID, targetID, importer)
+            error = target_exchange_provider_output(parentProcessID, targetID, importer)
             if error:
                 error_dicts["matchExcFromPrvIsInput"].append(error)
                 continue
 
-    if debug:
-        log.info("Debug Summary:")
-        log.info(f"Total processes checked: {total_processes}")
-        log.info(f"Total exchanges checked: {total_exchanges_checked}")
-        log.info(f"Total exchanges that are not dictionaries: {exch_not_dict}")
-        log.info(f"Skipped exchanges (not input): {skipped_exchanges}")
-        log.info(f"Malformed flow entries: {malformed_flows}")
-        log.info(f"Exchanges with missing defaultProvider dict: {missing_provider_dict}")
-        log.info(f"Number of defaultProvider dicts with entry errors: {malformed_providers}")
-        log.info("Debug summary complete.")
+    # if debug:
+    log.info("Debug Summary:")
+    log.info(f"Total processes checked: {total_processes}")
+    log.info(f"Total exchanges checked: {total_exchanges_checked}")
+    log.info(f"Total exchanges that are not dictionaries: {exch_not_dict}")
+    log.info(f"Skipped exchanges (not input): {skipped_exchanges}")
+    log.info(f"Malformed flow entries: {malformed_flows}")
+    log.info(f"Exchanges with missing defaultProvider dict: {missing_provider_dict}")
+    log.info(f"Number of defaultProvider dicts with entry errors: {malformed_providers}")
+    log.info("Debug summary complete.")
 
     write_provider_errors(error_dicts, output_path)
 
