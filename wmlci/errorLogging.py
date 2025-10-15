@@ -7,15 +7,16 @@ from collections import defaultdict
 import os
 import hashlib
 from typing import Optional, List
-from bw2calc import LCA, LeastSquaresLCA
 import openpyxl
 from openpyxl.utils.dataframe import dataframe_to_rows
 import zipfile
 
+from bw2calc import LCA, LeastSquaresLCA
 from bw2io.importers.json_ld import JSONLDImporter
 
-from wmlci.settings import paths, sourcedatapath
+from wmlci.settings import paths, sourcedatapath, wmlcioutputpath
 from wmlci.wmlci_log import log
+
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
@@ -658,3 +659,26 @@ def write_unlinked_flows_to_excel(importer, output_directory):
         df_unique_process_unlinked.to_excel(writer, sheet_name="unique_process_unlinked_exc", index=False)
 
     log.info(f"Excel file saved to: {output_path}")
+
+
+def check_for_errors_in_jsonld_import(jsonld):
+    """
+    Combine error checking into single function to call after importing and loading a jsonld
+    :param jsonld:
+    :return:
+    """
+    print_avoided_input_uuids(jsonld)
+    # find_missing_unit_group_id(ug_id, jsonld) # todo:need to define ug_id
+    find_production_exchange_errors(jsonld)
+    find_location_issues(jsonld)
+    find_faulty_allocation_factors(jsonld)
+    find_unallocatable_processes(jsonld)
+    processes_with_no_outputs_or_ref_flow(jsonld)
+    # check_default_provider_exists(parent_id, target_id, importer) # todo: define terms
+    # validate_default_provider_metadata(parent_id, target_id, importer) # todo: define terms
+    # check_provider_exists(parent_id, target_id, importer)      # todo: define terms
+    # provider_lacks_target_exchange(parent_id, target_id, importer)    # todo: define terms
+    # target_exchange_provider_output(parent_id, target_id, importer)    # todo: define terms
+    # write_provider_errors(error_dicts, output_path)        # todo: define terms
+    # check_default_providers(importer, output_path, debug=False)      # todo: define terms
+    write_unlinked_flows_to_excel(jsonld, wmlcioutputpath)
