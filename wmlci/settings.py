@@ -19,7 +19,7 @@ logoutputpath = outputpath / 'Logs'
 errorlogsoutputpath = outputpath / 'errorLogs'
 
 # ensure directories exist
-for d in [sourcedatapath,wmlcioutputpath, logoutputpath]:
+for d in [outputpath, sourcedatapath, wmlcioutputpath, logoutputpath, errorlogsoutputpath]:
     mkdir_if_missing(d)
 
 # Common declaration of write format for package data products
