@@ -16,6 +16,7 @@ outputpath = paths.local_path
 sourcedatapath = outputpath / 'sourceData'
 wmlcioutputpath = outputpath / 'WMLCI'
 logoutputpath = outputpath / 'Logs'
+errorlogsoutputpath = outputpath / 'errorLogs'
 
 # ensure directories exist
 for d in [sourcedatapath,wmlcioutputpath, logoutputpath]:
