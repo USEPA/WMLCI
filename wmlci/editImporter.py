@@ -268,4 +268,6 @@ def correct_jsonld_input_key(jsonld):
         for exc in process.get("exchanges", []):
             if "isInput" in exc:
                 exc["input"] = exc.pop("isInput")
+            if "IsInput" in exc:
+                exc["input"] = exc.pop("IsInput")
     return jsonld
