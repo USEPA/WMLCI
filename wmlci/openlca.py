@@ -29,8 +29,9 @@ import numpy as np
 import pandas as pd
 
 # importing data exported from openlca
-# openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'
-openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'
+# openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
+openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
+# openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
 
 # initiate project
 bd.projects.set_current("openlca-eval")
