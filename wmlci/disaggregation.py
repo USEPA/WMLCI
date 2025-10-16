@@ -36,7 +36,7 @@ def get_multifunctional_processes(jsonld):
 
         products = [
             exc for exc in process_data.get('exchanges', [])
-            if not exc.get('input') and
+            if not exc.get('isInput') and
                exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
         ]
         # print(f"products for {process_id} are: {products}")
@@ -101,7 +101,7 @@ def validate_allocation_factors(importer, multifunctional_process_uuids, toleran
         # Get product flows
         products = [
             exc for exc in process_data.get('exchanges', [])
-            if not exc.get('input') and
+            if not exc.get('isInput') and
                exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
         ]
 

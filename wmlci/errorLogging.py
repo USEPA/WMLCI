@@ -31,7 +31,7 @@ def print_avoided_input_uuids(jsonld):
     """
     log.info("\nChecking for avoided products used as inputs...\n")
     for pid, process in jsonld.data.get("processes", {}).items():
-        if process.get("input"):
+        if process.get("isInput"):
             for exc in process.get("exchanges", []):
                 if exc.get("isAvoidedProduct"):
                     log.info(f" Process UUID: {pid} -> Exchange UUID: {exc.get('id')}")
@@ -223,7 +223,7 @@ def processes_with_no_outputs_or_ref_flow(importer):
 
     for pid, process in processes.items():
         exchanges = process.get("exchanges", [])
-        has_output = any(exchange.get("input") is False for exchange in exchanges)
+        has_output = any(exchange.get("isInput") is False for exchange in exchanges)
         has_quant_ref = any(exchange.get("isQuantitativeReference") is True for exchange in exchanges)
         if not has_output:
             log.info(f"{pid}: no outputs")
@@ -245,7 +245,7 @@ def check_default_provider_exists(parent_id, target_id, importer):
     try:
         exchange = next(
             ex for ex in process["exchanges"]
-            if ex.get("input") and ex.get("flow", {}).get("@id") == target_id
+            if ex.get("isInput") and ex.get("flow", {}).get("@id") == target_id
         )
     except StopIteration:
         return {
@@ -278,7 +278,7 @@ def validate_default_provider_metadata(parent_id, target_id, importer):
     required_keys = ["@id", "name", "category", "flowType"]
 
     for exchange in process.get("exchanges", []):
-        if not exchange.get("input"):
+        if not exchange.get("isInput"):
             continue
 
         flow = exchange.get("flow", {})
@@ -357,7 +357,7 @@ def target_exchange_provider_output(parent_id, target_id, importer):
     for found_exch in found_provider.get("exchanges", []):
         found_flow = found_exch.get("flow", {})
         if found_flow.get("@id") == target_id:
-            if found_exch.get("input", False):
+            if found_exch.get("isInput", False):
                 return {
                     "parentProcessID": parent_id,
                     "targetID": target_id,
@@ -445,7 +445,7 @@ def check_default_providers(importer, output_path, debug=False):
             if not isinstance(exch, dict):
                 exch_not_dict += 1
                 continue
-            if not exch.get("input", False):
+            if not exch.get("isInput", False):
                 skipped_exchanges += 1
                 continue
             flow = exch.get("flow", {})
@@ -619,7 +619,7 @@ def write_unlinked_flows_to_excel(importer, output_directory):
         has_unlinked = False
 
         for exc in ds.get("exchanges", []):
-            if not exc.get("input") and not (ds_type == "multifunctional" and exc.get("functional")):
+            if not exc.get("isInput") and not (ds_type == "multifunctional" and exc.get("functional")):
                 exc_hash = activity_hash(exc)
 
                 # ✅ Use hash to determine uniqueness
