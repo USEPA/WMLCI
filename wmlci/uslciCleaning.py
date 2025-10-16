@@ -19,7 +19,7 @@ List of implemented fixes:
 from wmlci.common import *
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
-from wmlci.settings import datapath
+from wmlci.settings import datapath, errorlogsoutputpath, sourcedatapath
 
 # Brightway
 import bw2data as bd
@@ -54,8 +54,8 @@ bd.projects.set_current("uslciCleaning")
 
 ## Set database and biosphere database names ##
 nameDB = 'uslci'
-pathLCIA = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\IPCC'
-path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\defaultFolders\Desktop\Databases\WARM refactor\USLCI_Q2_2025_elci_merged'
+pathLCIA = f"{sourcedatapath}/IPCC"
+path = f"{sourcedatapath}/USLCI_Q2_2025_elci_merged"
 
 ## Import USLCI as JSON-LD
 #uslci = load_JSONLD_sourceData('USLCI_Q2_2025_elci_merged', bw_database_name=nameDB)
@@ -79,7 +79,7 @@ processes_with_no_outputs_or_ref_flow(uslci)
 
 ## Run default provider QA/QC ##
 # Save errors to spreadsheet at location defined in path
-errorPath = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\providerErrorLogging.xlsx'
+errorPath = f"{errorlogsoutputpath}/providerErrorLogging.xlsx"
 check_default_providers(uslci, errorPath, debug=True)
 
 ## Fix location errors ##
