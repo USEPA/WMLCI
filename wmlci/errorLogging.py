@@ -611,8 +611,8 @@ def write_unlinked_flows_to_excel(importer, output_directory):
     unique_process_set = set()
     unique_process_data = []
 
-    for pid, ds in importer.data.get("processes", {}).items():
-        ds_type = ds.get("@type")
+    for ds in importer.data:
+        ds_type = ds.get("type")
         ds_code = ds.get("code", "No code")
         ds_name = ds.get("name", "No name")
 
