@@ -8,7 +8,7 @@ from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
 from wmlci.settings import paths, sourcedatapath
-from wmlci.wmlci_log import log
+from wmlci.log import log
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
 

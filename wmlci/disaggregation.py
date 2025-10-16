@@ -2,7 +2,7 @@
 Disaggregate multifunctional processes
 """
 
-from wmlci.wmlci_log import log
+from wmlci.log import log
 
 
 def find_allocation_test_process(jsonld):

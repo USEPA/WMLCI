@@ -4,7 +4,7 @@ Functions to clean up imported olca data and generate square technosphere matrix
 
 from bw2io.importers.json_ld import JSONLDImporter
 
-from wmlci.wmlci_log import log
+from wmlci.log import log
 
 from esupy.remote import make_url_request
 from esupy.util import make_uuid
