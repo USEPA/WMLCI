@@ -28,65 +28,63 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# importing food waste data exported from openlca
-# warmfilename = 'warm_v16_openlca_database_Mar2022_fw'
-warmfilename = 'warm_v16_openlca_database_2025-06-13'
+# importing data exported from openlca
+# openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'
+openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'
 
 # initiate project
-bd.projects.set_current("warm-eval")
+bd.projects.set_current("openlca-eval")
 
-# import warm openlca data - data was originally exported from WARM openLCA in May 2025, then modified to address
-# data issues in June 2025
-# if 'warm_openlca' in bd.databases:
-#     print('warm_openlca is already present in the project.')
+# import warm openlca data
+# if 'openlca_db' in bd.databases:
+#     print('openlca_db is already present in the project.')
 # else:
-warm = load_JSONLD_sourceData(warmfilename,
-                              bw_database_name='warm_openlca')
+jsonld = load_JSONLD_sourceData(openlca_sourceData,
+                              bw_database_name='openlca_db')
 
 # change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
-# warm = correct_jsonld_input_key(warm)
+# jsonld = correct_jsonld_input_key(jsonld)
 
 # check for errors in imported data - these checks do not fix the errors
-# todo: incorporate error fixes into checks?
-check_for_errors_in_jsonld_import(warm)
+check_for_errors_in_jsonld_import(jsonld)
 
 # apply common clean up procedures
-warm = clean_JSONLD_sourceData(warm)
+jsonld = clean_JSONLD_sourceData(jsonld)
 
 # check for errors again
 log.info("Checking errors are fixed")
-check_for_errors_in_jsonld_import(warm)
+check_for_errors_in_jsonld_import(jsonld)
 
 
 
-# # check for multi processes - food waste data does not have multifunctional processes, even though not a square matrix
-# # warm = disaggregate_multifunctional_processes(warm)
+# check for multi processes - food waste data does not have multifunctional processes, even though not a square matrix
+# jsonld = disaggregate_multifunctional_processes(jsonld)
 
 # fixing issues when ecoinvent and brightway have to talk by manipulating data sets
-warm.apply_strategies()
-# check for unlinked flows - output errors # todo: check when to run this - after apply_strategies or write_database?
-write_unlinked_flows_to_excel(warm, errorlogsoutputpath)
+jsonld.apply_strategies()
+# check for unlinked flows - output errors
+write_unlinked_flows_to_excel(jsonld, errorlogsoutputpath)
 
 # merge biosphere flows
-warm.write_separate_biosphere_database()
-warm.merge_biosphere_flows()
+jsonld.write_separate_biosphere_database()
+jsonld.merge_biosphere_flows()
 # checking if everything worked out with strategies and linking
-warm.statistics()
+jsonld.statistics()
 # write to excel
 # warm.write_excel(only_unlinked=False) # set to True if errors
 # save the database to our hard drive
-warm.write_database()
+jsonld.write_database()
 
 # assign database to variable
-warmdb = bd.Database("warm_openlca")
+openlca_db = bd.Database("openlca_db")
 
 # print type/length of db
 print(
-    "The imported warm openlca database is of type {} and has a length of {}.".format(
-        type(warmdb), len(warmdb)
+    "The imported openlca database is of type {} and has a length of {}.".format(
+        type(openlca_db), len(openlca_db)
     )
 )
 
 # only works if square technosphere matrix
-warmdb.graph_technosphere()
+openlca_db.graph_technosphere()
 
