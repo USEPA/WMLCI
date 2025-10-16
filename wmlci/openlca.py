@@ -43,7 +43,7 @@ warm = load_JSONLD_sourceData(warmfilename,
                               bw_database_name='warm_openlca')
 
 # change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
-warm = correct_jsonld_input_key(warm)
+# warm = correct_jsonld_input_key(warm)
 
 # check for errors in imported data - these checks do not fix the errors
 # todo: incorporate error fixes into checks?
@@ -72,20 +72,20 @@ warm.merge_biosphere_flows()
 # checking if everything worked out with strategies and linking
 warm.statistics()
 # write to excel
-warm.write_excel(only_unlinked=False) # set to True if errors
+# warm.write_excel(only_unlinked=False) # set to True if errors
 # save the database to our hard drive
 warm.write_database()
 
-# # assign database to variable
-# warmdb = bd.Database("warm_openlca")
-#
-# # print type/length of db
-# print(
-#     "The imported warm openlca database is of type {} and has a length of {}.".format(
-#         type(warmdb), len(warmdb)
-#     )
-# )
-#
-# # only works if square technosphere matrix
-# warmdb.graph_technosphere()
+# assign database to variable
+warmdb = bd.Database("warm_openlca")
+
+# print type/length of db
+print(
+    "The imported warm openlca database is of type {} and has a length of {}.".format(
+        type(warmdb), len(warmdb)
+    )
+)
+
+# only works if square technosphere matrix
+warmdb.graph_technosphere()
 
