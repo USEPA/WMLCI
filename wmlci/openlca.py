@@ -29,7 +29,8 @@ import numpy as np
 import pandas as pd
 
 # importing food waste data exported from openlca
-warmfilename = 'warm_v16_openlca_database_Mar2022_fw'
+# warmfilename = 'warm_v16_openlca_database_Mar2022_fw'
+warmfilename = 'warm_v16_openlca_database_2025-06-13'
 
 # initiate project
 bd.projects.set_current("warm-eval")
