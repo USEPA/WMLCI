@@ -680,4 +680,3 @@ def check_for_errors_in_jsonld_import(jsonld):
     processes_with_no_outputs_or_ref_flow(jsonld)
     # todo: update the excel document name
     check_default_providers(jsonld, errorlogsoutputpath/"WMLCI_Error_Logging", debug=False)
-    write_unlinked_flows_to_excel(jsonld, errorlogsoutputpath)

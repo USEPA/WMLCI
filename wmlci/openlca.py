@@ -63,6 +63,9 @@ check_for_errors_in_jsonld_import(warm)
 
 # fixing issues when ecoinvent and brightway have to talk by manipulating data sets
 warm.apply_strategies()
+# check for unlinked flows - output errors # todo: check when to run this - after apply_strategies or write_database?
+write_unlinked_flows_to_excel(warm, errorlogsoutputpath)
+
 # merge biosphere flows
 warm.write_separate_biosphere_database()
 warm.merge_biosphere_flows()
