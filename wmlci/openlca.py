@@ -30,8 +30,8 @@ import pandas as pd
 
 # importing data exported from openlca
 # openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
-openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
-# openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
+#openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
+openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
 
 # initiate project
 bd.projects.set_current("openlca-eval")
@@ -43,11 +43,11 @@ bd.projects.set_current("openlca-eval")
 jsonld = load_JSONLD_sourceData(openlca_sourceData,
                               bw_database_name='openlca_db')
 
-# change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
-# jsonld = correct_jsonld_input_key(jsonld)
-
 # check for errors in imported data - these checks do not fix the errors
 check_for_errors_in_jsonld_import(jsonld)
+
+# change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
+#jsonld = correct_jsonld_input_key(jsonld)
 
 # apply common clean up procedures
 jsonld = clean_JSONLD_sourceData(jsonld)

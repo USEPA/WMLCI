@@ -21,7 +21,6 @@ from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 
-
 def print_avoided_input_uuids(jsonld):
     """
     Prints the UUIDs of processes and exchanges where avoided products are used as inputs.
@@ -129,8 +128,8 @@ def find_faulty_allocation_factors(jsonld):
     :param jsonld:
     :return:
     """
+    log.info("\nSearching for faulty allocation factors")
     faulty_processes = []
-
     for process_id, process in jsonld.data.get("processes", {}).items():
         if process.get("type") in {"emission", "product"}:
             continue
@@ -177,6 +176,7 @@ def find_unallocatable_processes(jsonld):
     :param jsonld:
     :return:
     """
+    log.info("\nSearching for un-allocatable processes...")
     for process_id, process in jsonld.data.get("processes", {}).items():
         # Skip if not allocatable
         if process.get("@type") in ("product", "emission"):
@@ -213,14 +213,14 @@ def find_unallocatable_processes(jsonld):
             log.info("-" * 60)
 
 
-def processes_with_no_outputs_or_ref_flow(importer):
+def processes_with_no_outputs_or_ref_flow(jsonld):
     """
     Iterates through all processes in JSONLDImporter object.
     Iterates through all exchanges in each process.
     Returns process uuid if there is no quantitative reference or no outputs.
     """
-    processes = importer.data.get("processes", {})
-
+    log.info("\nSearching for processes with no reference flow or outputs...")
+    processes = jsonld.data.get("processes", {})
     for pid, process in processes.items():
         exchanges = process.get("exchanges", [])
         has_output = any(exchange.get("isInput") is False for exchange in exchanges)

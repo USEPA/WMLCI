@@ -66,13 +66,13 @@ def remove_impact_free_objects(importer) -> None:
         # Check if the process has any output exchange that is an elementary flow
         for exchange_out in target_process_exchanges:
             # If the exchange is an output and its flow type is ELEMENTARY_FLOW, the process has impacts
-            if not exchange_out.get('input') and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
+            if not exchange_out.get('isInput') and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
                 impact_free_status_by_id[target_process_id] = False
                 return False
         # Check all input exchanges for default providers
         for exchange_in in target_process_exchanges:
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference another process
-            if exchange_in.get('input') and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if exchange_in.get('isInput') and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 input_default_provider = exchange_in.get('defaultProvider')
                 # If the exchange has a default provider, we need to check if that provider has impacts
                 if input_default_provider:
@@ -96,7 +96,7 @@ def remove_impact_free_objects(importer) -> None:
         retained_exchanges = []
         for exchange_to_check in process_data_to_clean.get('exchanges', []):
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference a provider
-            if exchange_to_check.get('input') and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if exchange_to_check.get('isInput') and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 provider_info_to_check = exchange_to_check.get('defaultProvider')
                 # If the exchange has a default provider, check if it's impact-free
                 if provider_info_to_check:
@@ -137,6 +137,7 @@ def apply_opposite_direction_approach(jsonld):
     :param jsonld:
     :return:
     '''
+    log.info('\nApplying the Opposite Direction Approach...')
     for process_id, process in jsonld.data.get("processes", {}).items():
         if process.get("type") in {"emission", "product"}:
             continue
@@ -151,16 +152,14 @@ def apply_opposite_direction_approach(jsonld):
                 continue
             else:
                 # Edit waste outputs from processes that are inputs to waste treatment
-                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("input") == False:
+                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == False:
                     exchange["amount"] *= -1  # make value negative
-                    flow["input"] = True  # make input
-                    exchange["input"] = True # make input
+                    exchange["isInput"] = True # make input
                 # Edit waste input to waste treatment
-                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("input") == True:
+                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == True:
                     exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
-                    flow["input"] = False  # make output
-                    exchange["input"] = False  # make output
+                    exchange["isInput"] = False  # make output
                     flow["flowType"] = "PRODUCT_FLOW"  # make product flow
     return jsonld
 
@@ -175,6 +174,7 @@ def add_process_location(jsonld):
     :param jsonld:
     :return:
     """
+    log.info("\nAdding locations to processes...")
     for process_id, process in jsonld.data.get("processes", {}).items():
         if process.get("type") in {"emission", "product"}:
             continue
@@ -210,8 +210,8 @@ def fix_exchange_locations(jsonld):
     JSONLDImporter
         The modified JSONLDImporter object with fixed exchange locations.
     """
+    log.info("\nFixing missing exchange locations. Setting to parent process location...")
     count_fixed = 0
-
     for pid, process in jsonld.data.get("processes", {}).items():
         parent_location = process.get("location")
 
@@ -222,12 +222,12 @@ def fix_exchange_locations(jsonld):
                 count_fixed += 1
 
                 if count_fixed % 1000 == 0:
-                    print(f"\n🔧 Fix #{count_fixed}")
-                    print(f"  - Original exchange location: {original_location}")
-                    print(f"  - Parent process location:    {parent_location}")
-                    print(f"  - Updated exchange location:  {exc['location']}")
+                    log.info(f"\n🔧 Fix #{count_fixed}")
+                    log.info(f"  - Original exchange location: {original_location}")
+                    log.info(f"  - Parent process location:    {parent_location}")
+                    log.info(f"  - Updated exchange location:  {exc['location']}")
 
-    print(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
+    log.info(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
     return jsonld
 
 ###########################
@@ -243,7 +243,7 @@ def remove_process_allocation_factors(jsonld):
     :param jsonld:
     :return:
     """
-
+    log.info("\n Removing faulty allocation factors...")
     for pid, process in jsonld.data.get("processes", {}).items():
         # pull allocation factors where value is not equal to 1, these factors are kept
         filtered = [

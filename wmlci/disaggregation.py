@@ -4,7 +4,6 @@ Disaggregate multifunctional processes
 
 from wmlci.log import log
 
-
 def find_allocation_test_process(jsonld):
     # This function finds a relatively simple multifunctional process for testing purposes
     valid_methods = {"PHYSICAL_ALLOCATION", "ECONOMIC_ALLOCATION"}
@@ -32,7 +31,6 @@ def get_multifunctional_processes(jsonld):
 
     # Create a list of products for current process
     for process_id, process_data in jsonld.data['processes'].items():
-        # print(process_id)
 
         products = [
             exc for exc in process_data.get('exchanges', [])

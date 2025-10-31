@@ -50,7 +50,7 @@ for project in projects:
     bd.projects.delete_project(project.name, delete_dir=True)
 
 ## Set active project ##
-bd.projects.set_current("uslciCleaning")
+bd.projects.set_current("uslci")
 
 ## Set database and biosphere database names ##
 nameDB = 'uslci'
@@ -58,8 +58,8 @@ pathLCIA = f"{sourcedatapath}/IPCC"
 path = f"{sourcedatapath}/USLCI_Q2_2025_elci_merged"
 
 ## Import USLCI as JSON-LD
-#uslci = load_JSONLD_sourceData('USLCI_Q2_2025_elci_merged', bw_database_name=nameDB)
-uslci = JSONLDImporter(path, nameDB, preferred_allocation="PHYSICAL_ALLOCATION")
+uslci = load_JSONLD_sourceData('USLCI_Q2_2025_elci_merged', bw_database_name=nameDB)
+#uslci = JSONLDImporter(path, nameDB, preferred_allocation="PHYSICAL_ALLOCATION")
 
 ###################################################################################
 ### Run debugging and cleaning functions such that apply_strategies() will work ###
