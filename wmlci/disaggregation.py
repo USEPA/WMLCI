@@ -1,6 +1,9 @@
 """
 Disaggregate multifunctional processes
 """
+"""
+Disaggregate multifunctional processes
+"""
 
 from wmlci.log import log
 
@@ -17,33 +20,42 @@ def find_allocation_test_process(jsonld):
             log.info("Valid processes for testing disaggregation algorithm:")
             log.info(process.get("@id"))
 
-
 def get_multifunctional_processes(jsonld):
     """
     Identify multifunctional processes from a Brightway25 JSONLDImporter object.
     A process is considered multifunctional if it contains more than one product output.
     Product outputs are defined as exchanges where:
-    - 'input' is False
-    - 'flow.flowType' is 'PRODUCT_FLOW'
+    - 'isInput' (or variants) is explicitly False
+    - 'flow.flowType' is 'PRODUCT_FLOW' (case-insensitive)
+    - 'flow.category' does NOT contain 'CUTOFF' or '56' (case-insensitive)
     """
-    # todo: check bw method for 'input' vs 'IsInput' vs 'isInput'
     multifunctional_process_uuids = []
 
-    # Create a list of products for current process
     for process_id, process_data in jsonld.data['processes'].items():
+        products = []
+        for exc in process_data.get('exchanges', []):
+            # Normalize input flag detection
+            input_flag = exc.get('isInput', exc.get('input', exc.get('IsInput', None)))
+            if input_flag == True:
+                continue
 
-        products = [
-            exc for exc in process_data.get('exchanges', [])
-            if not exc.get('isInput') and
-               exc.get('flow', {}).get('flowType') == 'PRODUCT_FLOW'
-        ]
-        # print(f"products for {process_id} are: {products}")
-        # Go to next process if not multifunctional
+            flow = exc.get('flow', {})
+            flow_type = flow.get('flowType', '').lower()
+            category = flow.get('category', '').lower()
+            flow_name = flow.get('name','').lower
+
+            # Check for valid product flow and exclude CUTOFF or '56'
+            if (flow_type == 'product_flow' and
+                    'cutoff' not in category and
+                    '56' not in category):
+                products.append(exc)
+
         if len(products) > 1:
             log.info(f"{process_id} contains multifunctional processes that require further processing")
             multifunctional_process_uuids.append(process_id)
 
     return multifunctional_process_uuids
+
 
 
 def validate_allocation_factors(importer, multifunctional_process_uuids, tolerance=0.01):
@@ -112,36 +124,34 @@ def validate_allocation_factors(importer, multifunctional_process_uuids, toleran
 
             # Is one of the allocation factors missing
             if not af:
-                reasons.append(f"Process {process_id}: Missing allocation factor for product {product_id}")
+                log.info(f"Process {process_id}: Missing allocation factor for product {product_id}")
                 continue
             # Is the allocation factor entry present but empty
             value = af.get('value')
             if value is None:
-                reasons.append(f"Process {process_id}: Allocation factor for product {product_id} is None")
+                log.info(f"Process {process_id}: Allocation factor for product {product_id} is None")
                 continue
             # Is the value invalid
             if value <= 0 or value >= 1:
-                reasons.append(
-                    f"Process {process_id}: Allocation factor for product {product_id} is {value}, must be between 0 and 1")
+                log.info(f"Process {process_id}: Allocation factor for product {product_id} is {value}, must be between 0 and 1")
                 continue
 
             total_allocation += value  # Sum of all allocation factors
-
+        '''
         # Populate validation failures
         if reasons:
             invalid_processes[process_id] = reasons
             continue
+        '''
 
         # Check that sum of allocation factors are within a reasonable tolerance of 1.0
         if abs(total_allocation - 1.0) > tolerance:
-            invalid_processes[process_id] = [
-                f"Process {process_id}: Total allocation sum is {total_allocation:.4f}, outside tolerance ±{tolerance}"
-            ]
+            log.info(f"Process {process_id}: Difference between AF sum and 1.0 is {total_allocation:.4f}, outside tolerance ±{tolerance}")
             continue
 
         valid_processes.append(process_id)
 
-    return valid_processes, invalid_processes
+    return valid_processes
 
 
 def disaggregate_multifunctional_processes(jsonld):
@@ -150,10 +160,9 @@ def disaggregate_multifunctional_processes(jsonld):
     Each process needs to produce one product.
     The technosphere matrix needs to be square for running LCA calculations
     :param jsonld:
-    :return jsnold:
+    :return jsonld:
     """
     mf_processes = get_multifunctional_processes(jsonld)
-    valid_processes, invalid_processes = validate_allocation_factors(jsonld, mf_processes,tolerance=0.01)
-
+    valid_processes = validate_allocation_factors(jsonld, mf_processes,tolerance=0.01)
 
     return jsonld

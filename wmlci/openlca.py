@@ -9,6 +9,7 @@ from boto3.docs.action import WARNING_MESSAGES
 
 # from wmlci.settings import sourcedatapath,wmlcioutputpath
 from wmlci.common import load_JSONLD_sourceData, clean_JSONLD_sourceData
+from wmlci.disaggregation import disaggregate_multifunctional_processes
 from wmlci.editImporter import *
 # from wmlci.disaggregation import *
 from wmlci.errorLogging import *
@@ -51,6 +52,19 @@ check_for_errors_in_jsonld_import(jsonld)
 
 # apply common clean up procedures
 jsonld = clean_JSONLD_sourceData(jsonld)
+
+### WORKING ON DISAGGREGATION ###
+
+jsonld = disaggregate_multifunctional_processes(jsonld)
+
+
+
+### END DISAGGREGATION WORK ###
+
+
+
+
+
 
 # check for errors again
 log.info("Checking errors are fixed")
