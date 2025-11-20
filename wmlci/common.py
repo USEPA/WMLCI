@@ -116,6 +116,8 @@ def clean_JSONLD_sourceData(jsonld):
     jsonld = remove_process_allocation_factors(jsonld)
     # Remove exchanges and processes with no impacts
     remove_impact_free_objects(jsonld)
+    # Convert parameters list to dictionary
+    jsonld = convert_param_list_to_dict(jsonld)
 
     return jsonld
 

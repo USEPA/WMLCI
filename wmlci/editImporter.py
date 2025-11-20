@@ -10,7 +10,7 @@ from esupy.remote import make_url_request
 from esupy.util import make_uuid
 from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
 
-from typing import Dict, Set
+from typing import Dict, Set, Any
 
 ######################################################
 ### Remove exchanges and processes with no impacts ###
@@ -270,4 +270,29 @@ def correct_jsonld_input_key(jsonld):
                 exc["input"] = exc.pop("isInput")
             if "IsInput" in exc:
                 exc["input"] = exc.pop("IsInput")
+    return jsonld
+
+def convert_param_list_to_dict(jsonld):
+    """
+    Convert parameter lists inside each process of a JSON-LD importer
+    to dictionaries keyed by parameter name, and return the updated importer.
+
+    Parameters
+    ----------
+    jsonld : bw2io.importers.json_ld.JSONLDImporter
+        The JSON-LD importer instance with `data` attribute.
+
+    Returns
+    -------
+    bw2io.importers.json_ld.JSONLDImporter
+        The same importer instance, with updated data.
+    """
+    processes = jsonld.data.get("processes", {})
+    for process_id, process in processes.items():
+        params_list = process.get("parameters", [])
+        if isinstance(params_list, list):
+            # Convert list to dict keyed by 'name'
+            params_dict = {param["@id"]: param for param in params_list if "@id" in param}
+            process["parameters"] = params_dict
+
     return jsonld

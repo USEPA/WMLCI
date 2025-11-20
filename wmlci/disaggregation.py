@@ -20,6 +20,37 @@ def find_allocation_test_process(jsonld):
             log.info("Valid processes for testing disaggregation algorithm:")
             log.info(process.get("@id"))
 
+
+def remove_nondefault_allocation_factors(jsonld):
+    """
+    Cleans the 'allocationFactors' list in each process of a Brightway JSON-LD dataset.
+
+    This function iterates through all processes in the JSON-LD structure and removes any
+    allocation factor entries whose 'allocationType' does not match the process's
+    'defaultAllocationMethod'. The JSON-LD structure is modified in-place.
+
+    Parameters:
+    -----------
+    jsonld : dict
+        A dictionary representing the full Brightway JSON-LD dataset, expected to contain
+        a 'processes' key with process dictionaries.
+
+    Returns:
+    --------
+    dict
+        The updated JSON-LD dictionary with cleaned allocation factors.
+    """
+    for process_id, process_data in jsonld.data['processes'].items():
+        default_method = process_data.get('defaultAllocationMethod')
+        if not default_method or "allocationFactors" not in process_data:
+            continue
+        cleaned_factors = [
+            af for af in process_data["allocationFactors"]
+            if af.get("allocationType") == default_method
+        ]
+        process_data["allocationFactors"] = cleaned_factors
+    return jsonld
+
 def get_multifunctional_processes(jsonld):
     """
     Identify multifunctional processes from a Brightway25 JSONLDImporter object.
@@ -162,6 +193,7 @@ def disaggregate_multifunctional_processes(jsonld):
     :param jsonld:
     :return jsonld:
     """
+    jsonld = remove_nondefault_allocation_factors(jsonld)
     mf_processes = get_multifunctional_processes(jsonld)
     valid_processes = validate_allocation_factors(jsonld, mf_processes,tolerance=0.01)
 

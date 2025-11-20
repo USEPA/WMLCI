@@ -9,7 +9,7 @@ from boto3.docs.action import WARNING_MESSAGES
 
 # from wmlci.settings import sourcedatapath,wmlcioutputpath
 from wmlci.common import load_JSONLD_sourceData, clean_JSONLD_sourceData
-from wmlci.disaggregation import disaggregate_multifunctional_processes
+from wmlci.disaggregation import disaggregate_multifunctional_processes, get_multifunctional_processes
 from wmlci.editImporter import *
 # from wmlci.disaggregation import *
 from wmlci.errorLogging import *
@@ -30,9 +30,10 @@ import numpy as np
 import pandas as pd
 
 # importing data exported from openlca
-# openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
+#openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
 #openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
-openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
+#openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
+openlca_sourceData = 'warm613_pilot_square' # three pilot processes w/ square tech. matrix
 
 # initiate project
 bd.projects.set_current("openlca-eval")
@@ -41,40 +42,38 @@ bd.projects.set_current("openlca-eval")
 # if 'openlca_db' in bd.databases:
 #     print('openlca_db is already present in the project.')
 # else:
-jsonld = load_JSONLD_sourceData(openlca_sourceData,
-                              bw_database_name='openlca_db')
+#jsonld = load_JSONLD_sourceData(openlca_sourceData,
+#                              bw_database_name='openlca_db')
+
+db_path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\warm613_pilot_square'
+lcia_path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\IPCC_LCIA_methods_1.2024-12.0'
+jsonld = JSONLDImporter(db_path, 'openlca_db')
+jsonldlcia = JSONLDLCIAImporter(lcia_path)
+
+### Checking for multifunctionality
+#jsonld = get_multifunctional_processes(jsonld)
 
 # check for errors in imported data - these checks do not fix the errors
 check_for_errors_in_jsonld_import(jsonld)
-
-# change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
-#jsonld = correct_jsonld_input_key(jsonld)
 
 # apply common clean up procedures
 jsonld = clean_JSONLD_sourceData(jsonld)
 
 ### WORKING ON DISAGGREGATION ###
 
-jsonld = disaggregate_multifunctional_processes(jsonld)
-
-
+#jsonld = disaggregate_multifunctional_processes(jsonld)
 
 ### END DISAGGREGATION WORK ###
-
-
-
-
-
 
 # check for errors again
 log.info("Checking errors are fixed")
 check_for_errors_in_jsonld_import(jsonld)
 
-
-
 # check for multi processes - food waste data does not have multifunctional processes, even though not a square matrix
 # jsonld = disaggregate_multifunctional_processes(jsonld)
 
+# change 'isInput' key in exchanges to 'input' as expected by BW, must do this change before checking for errors
+#jsonld = correct_jsonld_input_key(jsonld)
 # fixing issues when ecoinvent and brightway have to talk by manipulating data sets
 jsonld.apply_strategies()
 # check for unlinked flows - output errors
