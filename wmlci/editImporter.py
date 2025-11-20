@@ -167,38 +167,78 @@ def apply_opposite_direction_approach(jsonld):
 ### Fix location issues ###
 ###########################
 
-def add_process_location(jsonld):
+def reset_location_dict(jsonld):
     """
-    fix for strategy json_ld_location_name() from strategies/json_ld.py
-    *** need to create some logic to infer location based on the location of the exchanges in the process (?)
-    :param jsonld:
-    :return:
+    Reset the 'locations' dictionary in a JSON-LD importer:
+    - Delete all existing entries.
+    - Add a single entry with predefined data.
+
+    Parameters
+    ----------
+    jsonld : bw2io.importers.json_ld.JSONLDImporter
+        The JSON-LD importer instance with `data` attribute.
+
+    Returns
+    -------
+    bw2io.importers.json_ld.JSONLDImporter
+        The same importer instance, with updated locations.
     """
-    log.info("\nAdding locations to processes...")
-    for process_id, process in jsonld.data.get("processes", {}).items():
-        if process.get("type") in {"emission", "product"}:
-            continue
-        location = process.get("location")
-        if isinstance(location, dict) and "name" in location:
-            continue  # Location is already in the correct format
-        else:
-            process["location"] = {
-                "@id": '0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2',
-                "@type": "Location",
-                "name": "United States"
-            }
+    # Reset locations dictionary
+    jsonld.data["locations"] = {
+        "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2": {
+            "@type": "Location",
+            "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
+            "name": "United States",
+            "category": "Country",
+            "version": "00.00.000",
+            "code": "US",
+            "latitude": 45.68811936470228,
+            "longitude": -112.49616351105776
+        }
+    }
     return jsonld
 
-def fix_exchange_locations(jsonld):
+def replace_process_location(jsonld):
     """
-    Ensures all exchanges in each process have a valid 'location' field.
-    If an exchange has a missing, None, or non-string 'location', it inherits
-    the location from its parent process.
+    Ensure each process in jsonld.data['processes'] has a location dictionary
+    with the required keys and values. Replace existing location or add if missing.
 
-    Every 5000th fix prints:
-        1. Original exchange location value
-        2. Parent process location
-        3. Updated exchange location value
+    Parameters
+    ----------
+    jsonld : bw2io.importers.json_ld.JSONLDImporter
+        The JSON-LD importer instance.
+
+    Returns
+    -------
+    bw2io.importers.json_ld.JSONLDImporter
+        The same importer instance with updated process locations.
+    """
+    log.info("\nAdding or replacing locations in processes...")
+
+    # Define the standard location dictionary
+    standard_location = {
+        "@type": "Location",
+        "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
+        "name": "United States",
+        "category": "Country"
+    }
+
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        # Skip processes of type emission or product
+        if process.get("type") in {"emission", "product"}:
+            continue
+
+        # Replace existing location or add new one
+        process["location"] = standard_location.copy()
+
+    return jsonld
+
+def replace_exchange_locations(jsonld):
+    """
+    Ensures all exchanges in each process have a location dictionary
+    matching the parent process location dictionary.
+    - If an exchange has a location (string or dict), replace it with the parent's location dict.
+    - If an exchange has no location, add the parent's location dict.
 
     Parameters
     ----------
@@ -208,26 +248,21 @@ def fix_exchange_locations(jsonld):
     Returns
     -------
     JSONLDImporter
-        The modified JSONLDImporter object with fixed exchange locations.
+        The modified JSONLDImporter object with updated exchange locations.
     """
-    log.info("\nFixing missing exchange locations. Setting to parent process location...")
-    count_fixed = 0
+    log.info("\nReplacing exchange locations with parent process location dictionary...")
+
     for pid, process in jsonld.data.get("processes", {}).items():
         parent_location = process.get("location")
 
+        # Skip if parent location is missing or not a dict
+        if not isinstance(parent_location, dict):
+            continue
+
         for exc in process.get("exchanges", []):
-            original_location = exc.get("location")
-            if original_location is None or not isinstance(original_location, str):
-                exc["location"] = parent_location
-                count_fixed += 1
+            # Always replace or add location with parent's location dict
+            exc["location"] = parent_location.copy()
 
-                if count_fixed % 1000 == 0:
-                    log.info(f"\n🔧 Fix #{count_fixed}")
-                    log.info(f"  - Original exchange location: {original_location}")
-                    log.info(f"  - Parent process location:    {parent_location}")
-                    log.info(f"  - Updated exchange location:  {exc['location']}")
-
-    log.info(f"\n✅ Total exchange locations fixed by inheriting from parent process: {count_fixed}")
     return jsonld
 
 ###########################

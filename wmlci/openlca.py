@@ -48,7 +48,7 @@ bd.projects.set_current("openlca-eval")
 db_path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\warm613_pilot_square'
 lcia_path = r'C:\Users\mchristie\OneDrive - Eastern Research Group\Projects\Brightway\IPCC_LCIA_methods_1.2024-12.0'
 jsonld = JSONLDImporter(db_path, 'openlca_db')
-jsonldlcia = JSONLDLCIAImporter(lcia_path)
+#jsonldlcia = JSONLDLCIAImporter(lcia_path)
 
 ### Checking for multifunctionality
 #jsonld = get_multifunctional_processes(jsonld)

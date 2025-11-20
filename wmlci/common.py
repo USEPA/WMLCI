@@ -108,10 +108,12 @@ def clean_JSONLD_sourceData(jsonld):
     """
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
-    # append location where missing in jsonld for json_ld_location_name()
-    jsonld = add_process_location(jsonld)
-    # For exchanges missing location, inherit parent process location data
-    jsonld = fix_exchange_locations(jsonld)
+    # Replace location dictionary with a single entry for the US
+    jsonld = reset_location_dict(jsonld)
+    # Set all process locations to US
+    jsonld = replace_process_location(jsonld)
+    # Set all exchange locations to US
+    jsonld = replace_exchange_locations(jsonld)
     # drop allocation factors of 1 due to missing exchange info causing error
     jsonld = remove_process_allocation_factors(jsonld)
     # Remove exchanges and processes with no impacts
