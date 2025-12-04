@@ -2,6 +2,8 @@
 Functions to clean up imported olca data and generate square technosphere matrix
 """
 
+import pandas as pd
+
 from bw2io.importers.json_ld import JSONLDImporter
 
 from wmlci.log import log
@@ -354,5 +356,24 @@ def convert_lcia_param_list_to_dict(jsonld):
             # Convert list to dict keyed by 'name'
             params_dict = {param["@id"]: param for param in params_list if "@id" in param}
             lcia_cat["parameters"] = params_dict
+
+    return jsonld
+
+
+def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
+    """
+    Map existing UUIDs in source data to target flow UUIDs as defined by the EPA's federal elementary flow list
+    https://github.com/FLCAC-admin/fedelemflowlist
+
+    :return:
+    """
+    # load fed flowlist mapping file and subset
+    mapping = pd.read_csv(f"https://raw.githubusercontent.com/FLCAC-admin/fedelemflowlist/master/fedelemflowlist/flowmapping/"
+                          f"{sourcelistname}.csv", dtype=str)
+    mapping = (mapping
+               .query("SourceFlowContext.str.contains('Elementary')")
+               ).reset_index(drop=True)
+    mapping = mapping[['SourceFlowUUID', 'TargetFlowUUID']]
+
 
     return jsonld
