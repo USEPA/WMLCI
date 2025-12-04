@@ -310,7 +310,7 @@ def correct_jsonld_input_key(jsonld):
 def convert_param_list_to_dict(jsonld):
     """
     Convert parameter lists inside each process of a JSON-LD importer
-    to dictionaries keyed by parameter name, and return the updated importer.
+    to dictionaries keyed by uuid, and return the updated importer.
 
     Parameters
     ----------
@@ -329,5 +329,30 @@ def convert_param_list_to_dict(jsonld):
             # Convert list to dict keyed by 'name'
             params_dict = {param["@id"]: param for param in params_list if "@id" in param}
             process["parameters"] = params_dict
+
+    return jsonld
+
+def convert_lcia_param_list_to_dict(jsonld):
+    """
+    Convert parameter lists inside each lcia_category of a JSON-LD LCIA importer
+    to dictionaries keyed by uuid, and return the updated importer.
+
+    Parameters
+    ----------
+    jsonld : bw2io.importers.json_ld.JSONLDLCIAImporter
+        The JSON-LD importer instance with `data` attribute.
+
+    Returns
+    -------
+    bw2io.importers.json_ld.JSONLDLCIAImporter
+        The same importer instance, with updated data.
+    """
+    lcia_cats = jsonld.data.get("lcia_categories", {})
+    for cat, lcia_cat in lcia_cats.items():
+        params_list = lcia_cat.get("parameters", [])
+        if isinstance(params_list, list):
+            # Convert list to dict keyed by 'name'
+            params_dict = {param["@id"]: param for param in params_list if "@id" in param}
+            lcia_cat["parameters"] = params_dict
 
     return jsonld
