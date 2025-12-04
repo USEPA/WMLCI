@@ -73,7 +73,7 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     """
     Load sourceData file. Checks for file in local directory, if does not exist, pulls file from USEPA's Data Commons
     :param fname: str, filename for source data
-    :param datatype: str, 'jsonld' or 'jsonldlcia'
+    :param datatype: str, 'jsonld' or 'jsonld_lcia'
     :param bw_database_name: str, set database name, default name set to 'db'
     :return:
     """
@@ -88,11 +88,13 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
         log.info(f"Unzipped {fname} to {sourcedatapath}")
 
     if datatype == 'jsonld':
+        log.info(f"Loading {filepath}")
         jsonld = JSONLDImporter(filepath, bw_database_name)
-    elif datatype == 'jsonldlcia':
+    elif datatype == 'jsonld_lcia':
+        log.info(f"Loading {filepath}")
         jsonld = JSONLDLCIAImporter(filepath)
     else:
-        log.error("Specify data type as 'jsonld' or 'jsonldlcia'")
+        log.error("Specify data type as 'jsonld' or 'jsonld_lcia'")
 
     return jsonld
 
@@ -106,6 +108,8 @@ def clean_JSONLD_sourceData(jsonld):
     :param bw_database_name:
     :return:
     """
+    # map UUIDs to the federal elementary flowlist UUIDs
+    jsonld = map_to_fedelemflowlist_UUIDs(jsonld)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US
