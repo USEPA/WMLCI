@@ -41,17 +41,18 @@ import pandas as pd
 #openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
 #openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
 #openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
-openlca_sourceData = 'warm613_pilot_square' # three pilot processes w/ square tech. matrix
+openlca_sourceData = 'warm613_pilot_square 2' # three pilot processes w/ square tech. matrix
+lcia_sourceData = 'IPCC_LCIA_methods_1.2024-12.0'
 
 # initiate project
 bd.projects.set_current("openlca-eval")
 
 # import warm openlca data
-if 'openlca_db' in bd.databases:
-     print('openlca_db is already present in the project.')
-else:
-    jsonld = load_JSONLD_sourceData(openlca_sourceData,
-                              bw_database_name='openlca_db')
+# if 'openlca_db' in bd.databases:
+#      print('openlca_db is already present in the project.')
+# else:
+jsonld = load_JSONLD_sourceData(openlca_sourceData, datatype= 'jsonld', bw_database_name='openlca_db')
+jsonldlcia = load_JSONLD_sourceData(lcia_sourceData, datatype= 'jsonld_lcia', bw_database_name='lcia_db')
 
 # check for errors in imported data - these checks do not fix the errors
 check_for_errors_in_jsonld_import(jsonld)
