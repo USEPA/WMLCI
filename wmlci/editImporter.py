@@ -374,6 +374,20 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
                .query("SourceFlowContext.str.contains('Elementary')")
                ).reset_index(drop=True)
     mapping = mapping[['SourceFlowUUID', 'TargetFlowUUID']]
+    # convert to dictionary
+    mapping_dict = dict(zip(mapping['SourceFlowUUID'], mapping['TargetFlowUUID']))
+
+    # replace existing UUIDs with fed flow list UUIDs
+    flows = jsonld.data.get("flows", {})
+
+    for key, value in flows.items():
+        flow_id = value.get("@id")
+        if flow_id in mapping_dict:
+            new_id = mapping_dict[flow_id]
+            value["@id"] = new_id
+            log.info(f"In {key}, replaced {flow_id} with {new_id}")
+        else:
+            log.info(f"In {key}, no UUIDs match fed flow list mapping")
 
 
     return jsonld
