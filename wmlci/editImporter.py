@@ -362,32 +362,48 @@ def convert_lcia_param_list_to_dict(jsonld):
 
 def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
     """
-    Map existing UUIDs in source data to target flow UUIDs as defined by the EPA's federal elementary flow list
+    Map existing UUIDs and related info in source data to target flow UUIDs as
+    defined by the EPA's federal elementary flow list
     https://github.com/FLCAC-admin/fedelemflowlist
 
-    :return:
+    :return: jsonld with updated flow info
     """
-    # load fed flowlist mapping file and subset
-    mapping = pd.read_csv(f"https://raw.githubusercontent.com/FLCAC-admin/fedelemflowlist/master/fedelemflowlist/flowmapping/"
-                          f"{sourcelistname}.csv", dtype=str)
+    # load fed flow list mapping file and subset
+    mapping = pd.read_csv(f"https://raw.githubusercontent.com/FLCAC-admin/fedelemflowlist/master/"
+                          f"fedelemflowlist/flowmapping/{sourcelistname}.csv", dtype=str)
     mapping = (mapping
                .query("SourceFlowContext.str.contains('Elementary')")
                ).reset_index(drop=True)
-    mapping = mapping[['SourceFlowUUID', 'TargetFlowUUID']]
+    mapping = mapping[['SourceFlowUUID', 'SourceUnit', 'ConversionFactor', 'TargetFlowUUID',
+                       'TargetFlowName', 'TargetFlowContext','TargetUnit']]
+
     # convert to dictionary
-    mapping_dict = dict(zip(mapping['SourceFlowUUID'], mapping['TargetFlowUUID']))
+    mapping_dict = mapping.set_index('SourceFlowUUID').to_dict(orient='index')
 
     # replace existing UUIDs with fed flow list UUIDs
     flows = jsonld.data.get("flows", {})
 
+    updated_flows = {}
     for key, value in flows.items():
-        source_id = value.get("@id")
-        if source_id in mapping_dict:
-            target_id = mapping_dict[source_id]
+        if key in mapping_dict:
+            target = mapping_dict[key]
+
+            # Replace fields with fed elem flow list targets
+            target_id = target['TargetFlowUUID']
             value["@id"] = target_id
-            log.info(f"In {key}, replaced {source_id} with {target_id}")
+            value["name"] = target['TargetFlowName']
+            value["category"] = target['TargetFlowContext']
+
+            log.info(f"Replaced values in {key} with federal elementary flow list mapping values")
+
+            # Use target_id as the new key
+            updated_flows[target_id] = value
         else:
-            log.info(f"In {key}, no UUIDs match fed flow list mapping")
+            # Keep original data if no mapping to fed elem flow list
+            updated_flows[key] = value
+
+    # Replace flows within jsonld
+    jsonld.data["flows"] = updated_flows
 
 
     return jsonld
