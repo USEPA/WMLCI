@@ -397,7 +397,7 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
             # Use target_id as the new key
             updated_flows[target_id] = value
 
-            log.info(f"Replaced values in {key} with federal elementary flow list mapping values")
+            log.info(f"Replaced data.flows values in {key} with federal elementary flow list mapping values")
         else:
             # Keep original data if no mapping to fed elem flow list
             updated_flows[key] = value
@@ -417,13 +417,28 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
                 flow["@id"] = target['TargetFlowUUID']
                 flow["name"] = target['TargetFlowName']
                 flow["category"] = target['TargetFlowContext']
-                log.info(f"Updated process {process_k}, exchange {idx} with "
-                         f"federal elementary flow list target values")
+                log.info(f"Replaced data.processes.exchanges.flow values with "
+                         f"federal elementary flow list target values for process {process_k}, exchange {idx}")
 
                 # Check for amountFormula at the same level as flow
                 if "amountFormula" in exchange:
                     log.info(f"INFO: amountFormula is present in process {process_k}, exchange {idx}")
 
-                # todo: check if need to convert flow value and unit
+                # Update amount if ConversionFactor != 1
+                cf = float(target.get("ConversionFactor"))
+                if cf != 1:
+                    original_amount = exchange["amount"]
+                    updated_amount = original_amount * cf
+                    exchange["amount"] = updated_amount
+                    log.info(f"Converted amount in process {process_k}, exchange {idx}: "
+                             f"{original_amount} x {cf} = {updated_amount}")
+
+                    # Update unit
+                    if "refUnit" in flow:
+                        original_unit = flow["refUnit"]
+                        updated_unit = target.get("TargetUnit", original_unit)
+                        flow["refUnit"] = updated_unit
+                        log.info(f"Updated refUnit in process {process_k}, exchange {idx} "
+                            f"from {original_unit} to {updated_unit}")
 
     return jsonld
