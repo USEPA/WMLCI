@@ -394,16 +394,36 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
             value["name"] = target['TargetFlowName']
             value["category"] = target['TargetFlowContext']
 
-            log.info(f"Replaced values in {key} with federal elementary flow list mapping values")
-
             # Use target_id as the new key
             updated_flows[target_id] = value
+
+            log.info(f"Replaced values in {key} with federal elementary flow list mapping values")
         else:
             # Keep original data if no mapping to fed elem flow list
             updated_flows[key] = value
-
     # Replace flows within jsonld
     jsonld.data["flows"] = updated_flows
 
+    # additionally map to fed elem flow list targets in jsonld.data.processes.exchanges.flow
+    processes = jsonld.data.get("processes", {})
+    for process_k, process_v in processes.items():
+        exchanges = process_v.get("exchanges", [])
+        for idx, exchange in enumerate(exchanges):
+            flow = exchange.get("flow", {})
+            flow_id = flow.get("@id")
+            if flow_id in mapping_dict:
+                target = mapping_dict[flow_id]
+
+                flow["@id"] = target['TargetFlowUUID']
+                flow["name"] = target['TargetFlowName']
+                flow["category"] = target['TargetFlowContext']
+                log.info(f"Updated process {process_k}, exchange {idx} with "
+                         f"federal elementary flow list target values")
+
+                # Check for amountFormula at the same level as flow
+                if "amountFormula" in exchange:
+                    log.info(f"INFO: amountFormula is present in process {process_k}, exchange {idx}")
+
+                # todo: check if need to convert flow value and unit
 
     return jsonld
