@@ -68,7 +68,7 @@ check_for_errors_in_jsonld_import(jsonld)
 # fixing issues when ecoinvent and brightway have to talk by manipulating data sets
 jsonld.apply_strategies()
 # check for unlinked flows - output errors
-write_unlinked_flows_to_excel(jsonld, errorlogsoutputpath)
+#write_unlinked_flows_to_excel(jsonld, errorlogsoutputpath)
 
 # merge biosphere flows
 #jsonld.write_separate_biosphere_database()

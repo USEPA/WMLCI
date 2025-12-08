@@ -255,15 +255,9 @@ def replace_exchange_locations(jsonld):
     log.info("\nReplacing exchange locations with parent process location dictionary...")
 
     for pid, process in jsonld.data.get("processes", {}).items():
-        parent_location = process.get("location")
-
-        # Skip if parent location is missing or not a dict
-        if not isinstance(parent_location, dict):
-            continue
-
         for exc in process.get("exchanges", []):
             # Always replace or add location with parent's location dict
-            exc["location"] = parent_location.copy()
+            exc["location"] = "United States"
 
     return jsonld
 
@@ -370,7 +364,8 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
     """
     # load fed flow list mapping file and subset
     mapping = pd.read_csv(f"https://raw.githubusercontent.com/FLCAC-admin/fedelemflowlist/master/"
-                          f"fedelemflowlist/flowmapping/{sourcelistname}.csv", dtype=str)
+        f"fedelemflowlist/flowmapping/{sourcelistname}.csv",
+        dtype=str)
     mapping = (mapping
                .query("SourceFlowContext.str.contains('Elementary')")
                ).reset_index(drop=True)
