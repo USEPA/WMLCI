@@ -41,7 +41,7 @@ import pandas as pd
 #openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
 #openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
 #openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
-openlca_sourceData = 'warm613_pilot_square 2' # three pilot processes w/ square tech. matrix
+openlca_sourceData = 'warm613_v16_pilot_square_2025-11-18' # three pilot processes w/ square tech. matrix
 lcia_sourceData = 'IPCC_LCIA_methods_1.2024-12.0'
 
 # initiate project
