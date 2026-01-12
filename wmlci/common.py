@@ -109,7 +109,7 @@ def clean_JSONLD_sourceData(jsonld):
     :return:
     """
     # map UUIDs to the federal elementary flowlist UUIDs
-    jsonld = map_to_fedelemflowlist_UUIDs(jsonld)
+    #jsonld = map_to_fedelemflowlist_UUIDs(jsonld)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US

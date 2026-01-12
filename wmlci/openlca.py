@@ -13,7 +13,7 @@ from boto3.docs.action import WARNING_MESSAGES
 
 # from wmlci.settings import sourcedatapath,wmlcioutputpath
 from wmlci.common import load_JSONLD_sourceData, clean_JSONLD_sourceData
-from wmlci.disaggregation import disaggregate_multifunctional_processes, get_multifunctional_processes
+from wmlci.disaggregation import split_multi_product_processes
 from wmlci.editImporter import *
 # from wmlci.disaggregation import *
 from wmlci.errorLogging import *
@@ -21,6 +21,7 @@ from wmlci.errorLogging import *
 import bw2analyzer as ba
 import bw2data as bd
 import bw2calc as bc
+from bw2calc import LCA
 import bw2io as bi
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
@@ -41,7 +42,9 @@ import pandas as pd
 #openlca_sourceData = 'warm_v16_openlca_database_Mar2022_fw'  # food waste data
 #openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
 #openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
-openlca_sourceData = 'warm613_v16_pilot_square_2025-11-18' # three pilot processes w/ square tech. matrix
+#openlca_sourceData = 'warm613_v16_pilot_square_2025-11-18' # three pilot processes w/ square tech. matrix
+#openlca_sourceData = 'warm613_v16_pilot_square_2025_12_11' # three pilot processes w/ square tech. matrix; reduced elem flows
+#openlca_sourceData = 'petro-refining-wProv' # petroleum refining process w/ no providers for testing disaggregation
 lcia_sourceData = 'IPCC_LCIA_methods_1.2024-12.0'
 
 # initiate project
@@ -53,6 +56,8 @@ bd.projects.set_current("openlca-eval")
 # else:
 jsonld = load_JSONLD_sourceData(openlca_sourceData, datatype= 'jsonld', bw_database_name='openlca_db')
 jsonldlcia = load_JSONLD_sourceData(lcia_sourceData, datatype= 'jsonld_lcia', bw_database_name='lcia_db')
+
+jsonld = split_multi_product_processes(jsonld)
 
 # check for errors in imported data - these checks do not fix the errors
 check_for_errors_in_jsonld_import(jsonld)
@@ -90,14 +95,14 @@ print(
     )
 )
 
-# only works if square technosphere matrix
-# openlca_db.graph_technosphere()
+## Pick production exchange and use product id as demand key ##
+openlca_db.graph_technosphere()
 
 # Prepare LCIA database
 jsonldlcia.apply_strategies()
 jsonldlcia.match_biosphere_by_id('openlca_db')
 jsonldlcia.statistics()
-jsonldlcia.drop_unlinked(verbose=True)
+#jsonldlcia.drop_unlinked(verbose=True)
 jsonldlcia.statistics()
 jsonldlcia.write_methods(overwrite=True) # uncomment if running for the first time
 
