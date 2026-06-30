@@ -24,6 +24,7 @@ dependencies = [
 
     # EPA dependencies
     "esupy @ git+https://github.com/USEPA/esupy.git@develop#egg=esupy",
+    "fedelemflowlist @ git+https://github.com/USEPA/fedelemflowlist.git#egg=fedelemflowlist",
 
     # Brightway 2.5 packages
     "brightway25>=1.1.1",
