@@ -1,52 +1,91 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "wmlci"
-version = "0.1.0"
+version = "1.0.0"
 description = "Waste Management Life Cycle Inventory Model Assembler and Calculator"
 readme = "README.md"
-requires-python = ">=3.9"
-license = {text = "MIT"}
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
 keywords = ["WARM", "waste management", "life cycle inventory", "emissions"]
 authors = [
-    {name = "Catherine Birney"},
-    {name = "Martin Christie"},
-    {name = "Andrew Beck"},
-    {name = "Wesley W. Ingwersen", email = "ingwersen.wesley@epa.org"},
+    { name = "Catherine Birney" },
+    { name = "Martin Christie" },
+    { name = "Andrew Beck" },
+    { name = "TBD", email = "XXX" },
 ]
+
 dependencies = [
+    "numpy>=2.2.6,<3.0.0",
+    "pandas>=2.3.0,<3.0.0",
+    "scipy>=1.13,<2.0.0",
+    "requests>=2.31,<3.0.0",
+    "openpyxl>=3.1.2,<4.0.0",
+    "matplotlib>=3.10,<4.0.0",
+    "seaborn>=0.13,<1.0.0",
+
+    # EPA dependencies
     "esupy @ git+https://github.com/USEPA/esupy.git@develop#egg=esupy",
 
-    "pip>=23.3",     # must specify when using pip installs
-    "numpy<2 ",     # <2.0 required by BW2 pkgs as of Apr. 2025
-    "pandas",
-    "requests",
-    "scipy",
-    "stats_arrays==0.7",
-
-    # BW2 pkgs
-    "brightway25 @ git+https://github.com/brightway-lca/brightway25.git@1.1.1-rebuild-pypi",
-    "bw2analyzer==0.11.8",
-    "bw2calc==2.3",
-    "bw2data==4.5.4",
-    "bw2io @ git+https://github.com/brightway-lca/brightway2-io@0.9.11",
-#    "bw2io @ git+https://github.com/maqchristie/brightway2-io.git@develop#egg=bw2io",
-    "bw2parameters==1.1.0",
-    "bw_migrations==0.2",
-    "bw_processing==1.0",
-    "bw_simapro_csv @ git+https://github.com/brightway-lca/bw_simapro_csv.git@0.4.3",
-    "ecoinvent_interface==3.1",
-    "matrix_utils==0.6",
-    "mrio_common_metadata==0.2.1",
-    "multifunctional @ git+https://github.com/brightway-lca/multifunctional.git@1.0",
-    "randonneur==0.6.1",
-    "randonneur_data==0.5.5"  # expect 0.6 to hit conda channels soon
+    # Brightway 2.5 packages
+    "brightway25>=1.1.1",
+    "bw2analyzer>=0.11.37",
+    "bw2calc>=2.5.0",
+    "bw2data>=4.7",
+    "bw2io>=0.9.17",
+    "bw2parameters>=1.1.0",
+    "bw_migrations>=0.2",
+    "bw_processing>=1.2",
+    "bw_simapro_csv>=0.4.3",
+    "ecoinvent_interface>=3.1",
+    "matrix_utils>=0.7.1",
+    "mrio_common_metadata>=0.2.1",
+    "multifunctional>=1.1.1",
+    "randonneur>=0.7.2",
+    "randonneur_data>=0.7.2",
+    "stats_arrays>=2.0",
 ]
 
-# Optional dependencies
-#[project.optional-dependencies]
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=6,<7",
+    "ruff>=0.12.3",
+    "black>=24.0.0,<25.0.0",
+    "ipython>=8.14.0,<9.0.0",
+    "ipykernel>=6.23.3,<7.0.0",
+    "jupyter>=1.0.0,<2.0.0",
+    "spyder-kernels>=3.1.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/USEPA/wmlci"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["wmlci"]
+
+[tool.hatch.metadata]
+allow-direct-references = true # required for github packages
+
+[tool.black]
+line-length = 88
+skip-string-normalization = true
+
+[tool.ruff]
+line-length = 88
+lint.extend-select = [
+    "I", # isort - import sorting
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["wmlci"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-s -v"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+log_cli_level = "INFO"
