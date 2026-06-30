@@ -133,30 +133,6 @@ print(f"{len(ipcc_methods)} IPCC methods available: {ipcc_methods[:5]}")
 # Select functional unit #
 ##############################
 
-def return_product(activity):
-    """
-    Return the product node for an activity's reference flow.
-
-    In Brightway 2.5, openLCA imports create separate process and product
-    nodes. The technosphere demand vector is indexed by products (rows),
-    not processes (columns). The production exchange links the process to
-    its reference product via exc.input.
-    """
-    production_exchanges = list(activity.production())
-    if len(production_exchanges) != 1:
-        raise ValueError(
-            f"Activity '{activity['name']}' has {len(production_exchanges)} "
-            "production exchanges; expected exactly one."
-        )
-    product = production_exchanges[0].input
-    if product.get("type") != "product":
-        raise ValueError(
-            f"Production exchange for '{activity['name']}' does not link to a "
-            f"product node (got type '{product.get('type')}')."
-        )
-    return product
-
-
 def return_process_product(db):
     """
     Return (process, product) pairs for processes with a single reference
@@ -175,10 +151,28 @@ def return_process_product(db):
     return pairs
 
 
-process_product = return_process_product(openlca_db)
-print(f"Found {len(process_product)} process/product pairs.")
-for act, product in process_product:
-    print(f"  - {act['name']} -> product id {product.id}")
+def return_system_processes(db):
+    """
+    Return the end-of-life material-pathway scenarios to run LCAs on.
+    """
+    consumed = set()
+    for act in db:
+        if act.get("type") != "process":
+            continue
+        for exc in act.technosphere():
+            consumed.add(exc.input.id)
+
+    systems = []
+    for act, product in return_process_product(db):
+        if product.id not in consumed:
+            systems.append((act, product))
+    return systems
+
+
+systems = return_system_processes(openlca_db)
+print(f"Found {len(systems)} product systems (material-pathway scenarios):")
+for act, product in systems:
+    print(f"  - {act['name']} -> {product['name']} (product id {product.id})")
 
 #######################
 # LCA calculation #
@@ -189,83 +183,147 @@ method = ('IPCC', 'AR6-20')
 if method not in bd.methods:
     log.error('Select available IPCC method.')
 
-# Select process to assess and its reference product.
-activity, product = process_product[0]
+# IPCC GWP methods are kg CO2 equivalents
+method_unit = "kg CO2e"
 
-# Print exchanges of the selected process
-print(f"\nExchanges for process: {activity['name']}")
-for exc in activity.exchanges():
-    print(
-        f"  {exc['amount']} {exc.get('unit', '')} of {exc.input['name']} "
-        f"({exc.input.get('location', 'n/a')}) - type: {exc['type']}"
-    )
-print(f"Reference product for demand: {product['name']} (id {product.id})")
+# Functional unit: demand passed to Brightway in reference-product units (WARM = kg).
+# Use 1 for 1 kg, or SHORT_TON_KG for one US short ton (~907.18 kg in WARM).
+SHORT_TON_KG = 907.18474
+functional_unit_demand = SHORT_TON_KG  # set to SHORT_TON_KG to run per short ton
 
-# Build Brightway 2.5 inputs and run the LCA. Based on product node id.
-funcUnt, data_objs, _ = bd.prepare_lca_inputs({product: 1}, method=method)
-lca = LCA(funcUnt, data_objs=data_objs)
-lca.lci()   # life cycle inventory: solves A^-1 f
-lca.lcia()  # life cycle impact assessment: C B A^-1 f
-print(f"\nMethod: {method}\nFunctional unit: {activity['name']}\nScore: {lca.score}\n")
+_UNIT_LABEL = {
+    "kilogram": "kg",
+    "short ton": "short ton",
+    "megajoule": "MJ",
+    "ton kilometer": "ton km",
+    "cubic meter": "m3",
+}
 
-##################################################
-# LCA for every product (single method) #
-##################################################
-# Loop over valid functional units for the chosen method and collect scores.
 
-results = []
-for act, product in process_product:
+def functional_unit_label(reference_product, product_unit, demand):
+    """functional unit string for CSV output."""
+    product_label = reference_product.replace(",", "").strip().lower()
+    if demand == 1:
+        unit_short = _UNIT_LABEL.get(product_unit, product_unit)
+        return f"1 {unit_short} {product_label}"
+    if abs(demand - SHORT_TON_KG) < 0.01:
+        return f"1 short ton {product_label}"
+    unit_short = _UNIT_LABEL.get(product_unit, product_unit)
+    return f"{demand} {unit_short} {product_label}"
+
+
+# Calc reference-product metadata for each process (units, production amount).
+process_meta = {}
+for proc, prod in return_process_product(openlca_db):
+    production_exchanges = list(proc.production())
+    prod_exc = production_exchanges[0] if production_exchanges else {}
+    process_meta[proc.id] = {
+        "reference_product": prod.get("name", ""),
+        "location": proc.get("location", ""),
+        "supply_unit": prod_exc.get("unit", ""),
+        "production_amount": prod_exc.get("amount") or 1,
+    }
+
+# Run LCA for each product system
+results = []        # one row per system (summary)
+detail_rows = []    # one row per process within each system (detailed)
+for activity, product in systems:
     try:
-        fu, data_objs, _ = bd.prepare_lca_inputs({product: 1}, method=method)
-        act_lca = LCA(fu, data_objs=data_objs)
-        act_lca.lci()
-        act_lca.lcia()
-        results.append({
-            "activity": act["name"],
-            "reference_product": product.get("name", act.get("reference product", "")),
-            "product_id": str(product.id),
-            "location": act.get("location", ""),
-            "method": str(method),
-            "unit": bd.methods[method].get("unit", ""),
-            "score": act_lca.score,
-        })
+        funcUnt, data_objs, _ = bd.prepare_lca_inputs(
+            {product: functional_unit_demand}, method=method
+        )
+        lca = LCA(funcUnt, data_objs=data_objs)
+        lca.lci()   # life cycle inventory: solves A^-1 f
+        lca.lcia()  # life cycle impact assessment: C B A^-1 f
     except (ValueError, bc.errors.OutsideTechnosphere) as err:
-        log.warning(f"Skipping '{act['name']}': {err}")
+        log.warning(f"Skipping system '{activity['name']}': {err}")
+        continue
 
+    sys_prod_exc = list(activity.production())[0]
+    fu_unit = sys_prod_exc.get("unit") or product.get("unit") or ""
+    fu_label = functional_unit_label(
+        product.get("name", ""), fu_unit, functional_unit_demand
+    )
+
+    results.append({
+        "system": activity["name"],
+        "reference_product": product.get("name", ""),
+        "functional_unit": fu_label,
+        "location": activity.get("location", ""),
+        "method": str(method),
+        "score": lca.score,
+        "score_unit": method_unit,
+        "score_metric_ton_co2e": lca.score / 1000,
+    })
+    print(f"\nSystem: {activity['name']}\n  Score: {lca.score} {method_unit}")
+
+    # decompose the system score by process: characterized_inventory column sums
+    # give each process's contribution to the system total, and supply_array
+    # gives how much of each process the system uses. Both are indexed by the
+    # technosphere columns (processes).
+    ci = lca.characterized_inventory  # biosphere flows x processes
+    col_contributions = np.asarray(ci.sum(axis=0)).ravel()
+    supply = np.asarray(lca.supply_array).ravel()
+    for idx in np.argsort(np.abs(col_contributions))[::-1]:
+        direct_contribution = col_contributions[idx]
+        proc = bd.get_activity(lca.dicts.activity.reversed[idx])
+        meta = process_meta.get(proc.id, {})
+
+        # scale process supply to physical reference-product amount per
+        # functional unit (e.g. 1 kg food waste landfilled)
+        process_supply = supply[idx]
+        production_amount = meta.get("production_amount") or 1
+        product_amount = process_supply * production_amount
+        product_unit = meta.get("supply_unit", "")
+        emissions_per_unit_of_product = (
+            direct_contribution / product_amount if product_amount else None
+        )
+
+        detail_rows.append({
+            "location": meta.get("location", proc.get("location", "")),
+            "system": activity["name"],
+            "activity": proc["name"],
+            "reference_product": meta.get("reference_product", ""),
+            "functional_unit": fu_label,
+            "product_amount": product_amount,
+            "product_amount_unit": product_unit,
+            "emissions_per_unit_of_product": emissions_per_unit_of_product,
+            "emissions_per_unit_of_product_unit": (
+                f"{method_unit} / {product_unit}" if product_unit else method_unit
+            ),
+            "FlowAmount": direct_contribution,
+            "FlowAmount_unit": method_unit,
+            "method": str(method),
+        })
+
+# write the system-level summary to CSV
 results_df = pd.DataFrame(results)
-results_df["product_id"] = results_df["product_id"].astype(str)
-print("\nLCA results:")
+print("\nLCA results (all systems):")
 print(results_df.to_string(index=False))
-
-# write results to the WMLCI output directory
 results_path = wmlcioutputpath / "openlca_lcia_results.csv"
 results_df.to_csv(results_path, index=False)
-log.info(f"LCA results written to {results_path}")
+log.info(f"System summary for {len(results_df)} systems written to {results_path}")
 
-############################
-# Assess Results #
-############################
+DETAIL_COLUMNS = [
+    "location",
+    "system",
+    "activity",
+    "reference_product",
+    "functional_unit",
+    "product_amount",
+    "product_amount_unit",
+    "emissions_per_unit_of_product",
+    "emissions_per_unit_of_product_unit",
+    "FlowAmount",
+    "FlowAmount_unit",
+    "method",
+]
 
-print(f"\nContribution analysis for: {activity['name']} ({method})")
-
-ci = lca.characterized_inventory  # sparse: biosphere flows x processes
-
-# top contributing processes - sum over biosphere rows of each column
-process_scores = np.asarray(ci.sum(axis=0)).ravel()
-process_order = np.argsort(np.abs(process_scores))[::-1]
-print("\nTop contributing processes:")
-for idx in process_order[:10]:
-    if process_scores[idx] == 0:
-        continue
-    node = bd.get_activity(lca.dicts.activity.reversed[idx])
-    print(f"  {process_scores[idx]: .6g}  {node['name']}")
-
-# top contributing elementary flows (sum over process cols of each row)
-flow_scores = np.asarray(ci.sum(axis=1)).ravel()
-flow_order = np.argsort(np.abs(flow_scores))[::-1]
-print("\nTop contributing elementary flows:")
-for idx in flow_order[:10]:
-    if flow_scores[idx] == 0:
-        continue
-    node = bd.get_activity(lca.dicts.biosphere.reversed[idx])
-    print(f"  {flow_scores[idx]: .6g}  {node['name']}")
+# write individual process results for all systems to csv
+detail_df = pd.DataFrame(detail_rows, columns=DETAIL_COLUMNS)
+detail_path = wmlcioutputpath / "openlca_lcia_results_detailed.csv"
+detail_df.to_csv(detail_path, index=False)
+log.info(
+    f"Detailed results ({len(detail_df)} process rows across "
+    f"{detail_df['system'].nunique()} systems) written to {detail_path}"
+)
