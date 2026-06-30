@@ -13,6 +13,7 @@ import zipfile
 
 from bw2calc import LCA, LeastSquaresLCA
 from bw2io.importers.json_ld import JSONLDImporter
+import bw2data as bd
 
 from wmlci.settings import paths, sourcedatapath, errorlogsoutputpath
 from wmlci.log import log
@@ -34,7 +35,7 @@ def print_avoided_input_uuids(jsonld):
             for exc in process.get("exchanges", []):
                 if exc.get("isAvoidedProduct"):
                     log.info(f" Process UUID: {pid} -> Exchange UUID: {exc.get('id')}")
-    log.info("\n✅ Scan complete.")
+    log.info("\nScan complete.")
 
 
 def find_missing_unit_group_id(jsonld):
@@ -50,9 +51,9 @@ def find_missing_unit_group_id(jsonld):
         for exc in process.get("exchanges", []):
             unit = exc.get("unit", {})
             if isinstance(unit, dict) and "@id" not in unit:
-                log.info(f"\n⚠️ Problem in activity: \n--Process: {pid}; Exchange: {exc} - missing @id")
+                log.info(f"\nProblem in activity: \n--Process: {pid}; Exchange: {exc} - missing @id")
                 log.info("-" * 60)
-    return log.info("\n✅ Search for unit group id issues is complete.")
+    return log.info("\nSearch for unit group id issues is complete.")
 
 
 def find_production_exchange_errors(jsonld):
@@ -108,11 +109,13 @@ def find_location_issues(jsonld):
         if isinstance(location, dict) and "name" in location:
             continue
         else:
-            print(f"⚠️ Problem with location in process ID '{process_id}':")
-            print(f"  Name: {process.get('name', 'Unnamed')}")
-            print(f"  Location value: {location}")
-            print("-" * 60)
-    return "\n✅ Search for location issues is complete."
+            log.warning(
+                f"Problem with location in process ID '{process_id}':"
+            )
+            log.warning(f"  Name: {process.get('name', 'Unnamed')}")
+            log.warning(f"  Location value: {location}")
+            log.warning("-" * 60)
+    return log.info("\nSearch for location issues is complete.")
 
 
 def find_faulty_allocation_factors(jsonld):
@@ -622,7 +625,7 @@ def write_unlinked_flows_to_excel(importer, output_directory):
             if not exc.get("isInput") and not (ds_type == "multifunctional" and exc.get("functional")):
                 exc_hash = activity_hash(exc)
 
-                # ✅ Use hash to determine uniqueness
+                # Use hash to determine uniqueness
                 if exc_hash not in unique_unlinked_set:
                     unique_unlinked_set.add(exc_hash)
                     unique_unlinked_data.append({
