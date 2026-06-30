@@ -5,6 +5,7 @@ numpy>=2.2.6,<3
 pandas>=2.3.0
 requests
 scipy
+pypardiso>=0.4.7    # fast sparse solver
 openpyxl
 matplotlib
 seaborn

@@ -17,6 +17,7 @@ dependencies = [
     "numpy>=2.2.6,<3.0.0",
     "pandas>=2.3.0,<3.0.0",
     "scipy>=1.13,<2.0.0",
+    "pypardiso>=0.4.7", # fast sparse solver
     "requests>=2.31,<3.0.0",
     "openpyxl>=3.1.2,<4.0.0",
     "matplotlib>=3.10,<4.0.0",
