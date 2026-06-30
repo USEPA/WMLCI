@@ -2,17 +2,19 @@
 Functions to clean up imported olca data and generate square technosphere matrix
 """
 
+import fedelemflowlist
 import pandas as pd
 
 from bw2io.importers.json_ld import JSONLDImporter
 
+from wmlci.errorLogging import validate_jsonld_exchanges
 from wmlci.log import log
 
-from esupy.remote import make_url_request
-from esupy.util import make_uuid
-from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
+from typing import Set
 
-from typing import Dict, Set, Any
+# values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
+_NO_TARGET = {"n.a.", "nan", "none", ""}
+
 
 ######################################################
 ### Remove exchanges and processes with no impacts ###
@@ -354,86 +356,221 @@ def convert_lcia_param_list_to_dict(jsonld):
     return jsonld
 
 
-def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname = "WARM"):
+def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
     """
-    Map existing UUIDs and related info in source data to target flow UUIDs as
-    defined by the EPA's federal elementary flow list
+    Harmonize inventory elementary flows to the EPA Federal Elementary Flow
+    List (FEDEFL) using a fedelemflowlist mapping table (matched by source UUID).
+
     https://github.com/FLCAC-admin/fedelemflowlist
 
-    :return: jsonld with updated flow info
+    Parameters
+    ----------
+    jsonld : bw2io.importers.json_ld.JSONLDImporter
+        Inventory importer, before ``apply_strategies()``.
+    sourcelistname : str
+        FEDEFL mapping table to use for this inventory (default 'WARM').
+
+    Returns
+    -------
+    jsonld : the same importer with elementary flows rewritten to FEDEFL UUIDs.
     """
-    # load fed flow list mapping file and subset
-    mapping = pd.read_csv(f"https://raw.githubusercontent.com/FLCAC-admin/fedelemflowlist/master/"
-        f"fedelemflowlist/flowmapping/{sourcelistname}.csv",
-        dtype=str)
-    mapping = (mapping
-               .query("SourceFlowContext.str.contains('Elementary')")
-               ).reset_index(drop=True)
-    mapping = mapping[['SourceFlowUUID', 'SourceUnit', 'ConversionFactor', 'TargetFlowUUID',
-                       'TargetFlowName', 'TargetFlowContext','TargetUnit']]
+    mapping = fedelemflowlist.get_flowmapping(sourcelistname)
 
-    # convert to dictionary
-    mapping_dict = mapping.set_index('SourceFlowUUID').to_dict(orient='index')
+    # keep only elementary-flow mappings that have a source UUID and a
+    # FEDEFL target UUID (drop economic flows and 'n.a.' targets)
+    mapping = mapping.dropna(subset=["SourceFlowUUID", "TargetFlowUUID"])
+    mapping = mapping[
+        mapping["SourceFlowContext"]
+        .astype(str)
+        .str.contains("Elementary", case=False, na=False)
+    ]
+    mapping = mapping[
+        ~mapping["TargetFlowUUID"].astype(str).str.strip().str.lower().isin(_NO_TARGET)
+    ]
+    mapping = mapping.drop_duplicates(subset=["SourceFlowUUID"], keep="first")
 
-    # replace existing UUIDs with fed flow list UUIDs
+    mapping_dict = (
+        mapping.set_index("SourceFlowUUID")[
+            [
+                "TargetFlowUUID",
+                "TargetFlowName",
+                "TargetFlowContext",
+                "ConversionFactor",
+                "TargetUnit",
+            ]
+        ].to_dict(orient="index")
+    )
+    log.info(
+        f"Using {len(mapping_dict)} '{sourcelistname}' -> FEDEFL elementary "
+        "flow mappings."
+    )
+
+    # rewrite the top-level flows dict, re-keying by the FEDEFL target UUID.
+    # Several source flows can collapse onto one FEDEFL flow (e.g. multiple
+    # carbon sources -> Carbon dioxide).
     flows = jsonld.data.get("flows", {})
-
     updated_flows = {}
+    flows_remapped = 0
     for key, value in flows.items():
-        if key in mapping_dict:
-            target = mapping_dict[key]
-
-            # Replace fields with fed elem flow list targets
-            target_id = target['TargetFlowUUID']
+        target = mapping_dict.get(key)
+        if target:
+            target_id = target["TargetFlowUUID"]
             value["@id"] = target_id
-            value["name"] = target['TargetFlowName']
-            value["category"] = target['TargetFlowContext']
-
-            # Use target_id as the new key
+            value["name"] = target["TargetFlowName"]
+            value["category"] = target["TargetFlowContext"]
             updated_flows[target_id] = value
-
-            log.info(f"Replaced data.flows values in {key} with federal elementary flow list mapping values")
+            flows_remapped += 1
         else:
-            # Keep original data if no mapping to fed elem flow list
             updated_flows[key] = value
-    # Replace flows within jsonld
     jsonld.data["flows"] = updated_flows
 
-    # additionally map to fed elem flow list targets in jsonld.data.processes.exchanges.flow
-    processes = jsonld.data.get("processes", {})
-    for process_k, process_v in processes.items():
-        exchanges = process_v.get("exchanges", [])
-        for idx, exchange in enumerate(exchanges):
+    # rewrite exchange flows and apply the conversion factor to amounts/units
+    exchanges_remapped = 0
+    for process_k, process in jsonld.data.get("processes", {}).items():
+        for idx, exchange in enumerate(process.get("exchanges", [])):
             flow = exchange.get("flow", {})
-            flow_id = flow.get("@id")
-            if flow_id in mapping_dict:
-                target = mapping_dict[flow_id]
+            if not isinstance(flow, dict):
+                continue
+            target = mapping_dict.get(flow.get("@id"))
+            if not target:
+                continue
+            flow["@id"] = target["TargetFlowUUID"]
+            flow["name"] = target["TargetFlowName"]
+            flow["category"] = target["TargetFlowContext"]
+            exchanges_remapped += 1
 
-                flow["@id"] = target['TargetFlowUUID']
-                flow["name"] = target['TargetFlowName']
-                flow["category"] = target['TargetFlowContext']
-                log.info(f"Replaced data.processes.exchanges.flow values with "
-                         f"federal elementary flow list target values for process {process_k}, exchange {idx}")
-
-                # Check for amountFormula at the same level as flow
+            try:
+                conversion_factor = float(target.get("ConversionFactor") or 1)
+            except (TypeError, ValueError):
+                conversion_factor = 1.0
+            if conversion_factor != 1 and "amount" in exchange:
                 if "amountFormula" in exchange:
-                    log.info(f"INFO: amountFormula is present in process {process_k}, exchange {idx}")
+                    log.warning(
+                        f"ConversionFactor {conversion_factor} not applied to "
+                        f"parameterized exchange (process {process_k}, exchange "
+                        f"{idx}) because it has an amountFormula."
+                    )
+                else:
+                    exchange["amount"] = exchange["amount"] * conversion_factor
+                    target_unit = target.get("TargetUnit")
+                    if "refUnit" in flow and target_unit:
+                        flow["refUnit"] = target_unit
 
-                # Update amount if ConversionFactor != 1
-                cf = float(target.get("ConversionFactor"))
-                if cf != 1:
-                    original_amount = exchange["amount"]
-                    updated_amount = original_amount * cf
-                    exchange["amount"] = updated_amount
-                    log.info(f"Converted amount in process {process_k}, exchange {idx}: "
-                             f"{original_amount} x {cf} = {updated_amount}")
+    log.info(
+        f"Harmonized {flows_remapped} flows and {exchanges_remapped} exchange "
+        f"flows to FEDEFL UUIDs using '{sourcelistname}'."
+    )
 
-                    # Update unit
-                    if "refUnit" in flow:
-                        original_unit = flow["refUnit"]
-                        updated_unit = target.get("TargetUnit", original_unit)
-                        flow["refUnit"] = updated_unit
-                        log.info(f"Updated refUnit in process {process_k}, exchange {idx} "
-                            f"from {original_unit} to {updated_unit}")
+    # rebuild snapshot from the harmonized flows so exchanges (FEDEFL codes)
+    # link to biosphere nodes (FEDEFL codes).
+    if hasattr(jsonld, "biosphere_database") and hasattr(
+        jsonld, "flows_as_biosphere_database"
+    ):
+        jsonld.biosphere_database[:] = jsonld.flows_as_biosphere_database(
+            jsonld.data, jsonld.db_name
+        )
+        log.info(
+            f"Rebuilt biosphere node snapshot with "
+            f"{len(jsonld.biosphere_database)} FEDEFL-harmonized flows."
+        )
+
+    issues = validate_jsonld_exchanges(jsonld)
+    if issues:
+        log.warning("Validation found problems:")
+        for issue in issues:
+            log.warning(" - " + issue)
+    else:
+        log.info("All exchanges validated successfully.")
 
     return jsonld
+
+
+def map_lcia_to_fedelemflowlist_UUIDs(
+    jsonld_lcia,
+    sourcelistname="IPCC",
+    preferred_target_context="emission/air",
+):
+    """
+    Harmonize LCIA characterization factors to FEDEFL using a fedelemflowlist
+    mapping table (matched by source flow NAME).
+
+    Parameters
+    ----------
+    jsonld_lcia : bw2io.importers.json_ld_lcia.JSONLDLCIAImporter
+        LCIA importer after ``apply_strategies()``.
+    sourcelistname : str
+        FEDEFL mapping table for the method (default 'IPCC').
+    preferred_target_context : str
+        FEDEFL target compartment to prefer when a flow name has several
+        context variants (default 'emission/air').
+
+    Returns
+    -------
+    jsonld_lcia : the same importer with CF flow UUIDs rewritten to FEDEFL.
+    """
+    mapping = fedelemflowlist.get_flowmapping(sourcelistname)
+    mapping = mapping.dropna(subset=["SourceFlowName", "TargetFlowUUID"])
+    mapping = mapping[
+        ~mapping["TargetFlowUUID"].astype(str).str.strip().str.lower().isin(_NO_TARGET)
+    ]
+
+    # choose a single FEDEFL target per source flow name, preferring the general
+    # air compartment, otherwise the most general (shortest) context string.
+    name_to_target = {}
+    for _, row in mapping.iterrows():
+        name = str(row["SourceFlowName"]).strip().lower()
+        context = str(row.get("TargetFlowContext") or "")
+        candidate = {
+            "TargetFlowUUID": row["TargetFlowUUID"],
+            "TargetFlowName": row["TargetFlowName"],
+            "TargetFlowContext": context,
+        }
+        current = name_to_target.get(name)
+        if current is None:
+            name_to_target[name] = candidate
+        elif context == preferred_target_context:
+            name_to_target[name] = candidate
+        elif (
+            current["TargetFlowContext"] != preferred_target_context
+            and len(context) < len(current["TargetFlowContext"])
+        ):
+            name_to_target[name] = candidate
+
+    matched = 0
+    duplicates_dropped = 0
+    for method in jsonld_lcia.data:
+        seen = {}  # FEDEFL UUID -> cf, to avoid double-characterizing a flow
+        kept = []
+        for cf in method.get("exchanges", []):
+            flow = cf.get("flow", {})
+            name = (flow.get("name") or "").strip().lower()
+            target = name_to_target.get(name)
+            if not target:
+                kept.append(cf)
+                continue
+            flow["@id"] = target["TargetFlowUUID"]
+            flow["name"] = target["TargetFlowName"]
+            flow["category"] = target["TargetFlowContext"]
+            matched += 1
+
+            target_id = target["TargetFlowUUID"]
+            existing = seen.get(target_id)
+            if existing is None:
+                seen[target_id] = cf
+                kept.append(cf)
+            else:
+                # two source names collapsed onto one FEDEFL flow; keep the
+                # larger-magnitude CF so we neither double count nor lose signal
+                duplicates_dropped += 1
+                if abs(cf.get("amount", 0)) > abs(existing.get("amount", 0)):
+                    existing.update(
+                        {k: v for k, v in cf.items() if k != "flow"}
+                    )
+                    existing["flow"] = cf["flow"]
+        method["exchanges"] = kept
+
+    log.info(
+        f"Harmonized {matched} LCIA characterization factors to FEDEFL UUIDs "
+        f"using '{sourcelistname}' ({duplicates_dropped} duplicate CFs merged)."
+    )
+    return jsonld_lcia
