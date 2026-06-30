@@ -683,3 +683,34 @@ def check_for_errors_in_jsonld_import(jsonld):
     processes_with_no_outputs_or_ref_flow(jsonld)
     # todo: update the excel document name
     check_default_providers(jsonld, errorlogsoutputpath/"WMLCI_Error_Logging", debug=False)
+
+
+def validate_jsonld_exchanges(jsonld):
+    """
+    Check for exchanges that do not exist in the biosphere data"
+    :param jsonld: 
+    :return: 
+    """""
+    biosphere = bd.Database("biosphere3")
+    valid_ids = {act["id"] for act in biosphere}
+    valid_categories = {"/".join(act["categories"]) for act in biosphere if "categories" in act}
+
+    problems = []
+    processes = jsonld.data.get("processes", {})
+    for process_k, process_v in processes.items():
+        exchanges = process_v.get("exchanges", [])
+        for idx, exchange in enumerate(exchanges):
+            flow = exchange.get("flow", {})
+            flow_id = flow.get("@id")
+            category = flow.get("category")
+            if flow_id and flow_id not in valid_ids:
+                problems.append(f"Process {process_k}, exchange {idx}: Invalid UUID {flow_id}")
+
+            if category and category not in valid_categories:
+                problems.append(f"Process {process_k}, exchange {idx}: Invalid category {category}")
+
+            for field in ["input", "amount", "type"]:
+                if field not in exchange:
+                    problems.append(f"Process {process_k}, exchange {idx}: Missing required field '{field}'")
+
+    return problems
