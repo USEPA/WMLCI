@@ -15,7 +15,6 @@ from boto3.docs.action import WARNING_MESSAGES
 from wmlci.common import load_JSONLD_sourceData, clean_JSONLD_sourceData
 from wmlci.disaggregation import split_multi_product_processes
 from wmlci.editImporter import *
-# from wmlci.disaggregation import *
 from wmlci.errorLogging import *
 
 import bw2analyzer as ba
@@ -43,7 +42,7 @@ import pandas as pd
 #openlca_sourceData = 'warm_v16_openlca_database_2025-06-13'  # all warm data
 #openlca_sourceData = 'USLCI_1_2025_06_0'  # USLCI w/ elci installed
 #openlca_sourceData = 'warm613_v16_pilot_square_2025-11-18' # three pilot processes w/ square tech. matrix
-#openlca_sourceData = 'warm613_v16_pilot_square_2025_12_11' # three pilot processes w/ square tech. matrix; reduced elem flows
+openlca_sourceData = 'warm613_v16_pilot_square_2025_12_11' # three pilot processes w/ square tech. matrix; reduced elem flows
 #openlca_sourceData = 'petro-refining-wProv' # petroleum refining process w/ no providers for testing disaggregation
 lcia_sourceData = 'IPCC_LCIA_methods_1.2024-12.0'
 
@@ -56,8 +55,6 @@ bd.projects.set_current("openlca-eval")
 # else:
 jsonld = load_JSONLD_sourceData(openlca_sourceData, datatype= 'jsonld', bw_database_name='openlca_db')
 jsonldlcia = load_JSONLD_sourceData(lcia_sourceData, datatype= 'jsonld_lcia', bw_database_name='lcia_db')
-
-jsonld = split_multi_product_processes(jsonld)
 
 # check for errors in imported data - these checks do not fix the errors
 check_for_errors_in_jsonld_import(jsonld)
@@ -132,3 +129,5 @@ lca.lci()
 lca.lcia()
 results.append((method, lca.score))
 print(f"Method: {method}\nScore: {lca.score}\n")
+
+## Test push MAC - 6/30/2026
