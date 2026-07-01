@@ -21,27 +21,26 @@ ipcc_method:
   - IPCC
   - AR5-100  # TODO: want to use AR4-100 to replicate excel tool
 
-functional_unit:
-  amount: 907.18474  # one US short ton
-  unit: kilogram
+model_defaults:
+  functional_unit:
+    amount: 907.18474  # one US short ton
+    unit: kilogram
 
-transport:
-  mode: excel_legacy
-  distance_miles: 20
-  openlca_input: null
+  transport:
+    mode: excel_legacy
+    distance_miles: 20
+    openlca_input: null
 
-landfill:
-  lfg: national_average
-  collection: typical
-  moisture: national_average
-  transport_miles: 20
+  landfill:
+    lfg: national_average
+    collection: typical
+    moisture: national_average
+    transport_miles: 20
 
 systems:
-  selection: explicit
-  systems_to_model:
-    "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
-    "MSW combustion of Mixed Plastics": null
-    "MSW recycling of Mixed Plastics": null
+  "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
+  "MSW combustion of Mixed Plastics": null
+  "MSW recycling of Mixed Plastics": null
 
 output:
   summary_csv: v16_lcia_results.csv
