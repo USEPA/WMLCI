@@ -269,7 +269,7 @@ def replace_exchange_locations(jsonld):
 
 def remove_process_allocation_factors(jsonld):
     """
-    The WARM openLCA processes include allocationFactors that are at times missing "exchange" information.
+    The Waste Reduction Model openLCA processes include allocationFactors that are at times missing "exchange" information.
     This missing information results in the error:
     bw2io.errors.UnallocatableDataset: We currently only support exchange-specific CAUSAL_ALLOCATION
     As all have factors of "1" - this information can be removed
