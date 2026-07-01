@@ -7,6 +7,7 @@ requests
 scipy
 pypardiso>=0.4.7    # fast sparse solver
 openpyxl
+pyyaml>=6.0,<7.0.0
 matplotlib
 seaborn
 stats_arrays>=2.0

@@ -5,7 +5,7 @@ description = "Waste Management Life Cycle Inventory Model Assembler and Calcula
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 license = { text = "MIT" }
-keywords = ["WARM", "waste management", "life cycle inventory", "emissions"]
+keywords = ["WARM", "waste reduction model", "waste management", "life cycle inventory", "emissions"]
 authors = [
     { name = "Catherine Birney" },
     { name = "Martin Christie" },
@@ -20,6 +20,7 @@ dependencies = [
     "pypardiso>=0.4.7", # fast sparse solver
     "requests>=2.31,<3.0.0",
     "openpyxl>=3.1.2,<4.0.0",
+    "pyyaml>=6.0,<7.0.0",
     "matplotlib>=3.10,<4.0.0",
     "seaborn>=0.13,<1.0.0",
 
@@ -67,6 +68,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["wmlci"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"wmlci/data" = "wmlci/data"
+"wmlci/methods" = "wmlci/methods"
 
 [tool.hatch.metadata]
 allow-direct-references = true # required for github packages
