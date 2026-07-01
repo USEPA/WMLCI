@@ -1,10 +1,12 @@
 # Data Descriptions
 
-## sourceData
+## source_data
 
-sourceData are stored as zip files on [USEPA's Data Commons](https://dmap-data-commons-ord.s3.amazonaws.com/index.html?prefix=flowsa/#WMLCI/sourceData/). Data are automatically downloaded to a user's local repository when running scripts.
+Source data are stored as zip files on [USEPA's Data Commons](https://dmap-data-commons-ord.s3.amazonaws.com/index.html?prefix=flowsa/#WMLCI/sourceData/). Data are automatically downloaded when running scripts. 
+Data Commons zips and unzipped JSON-LD inventories are saved to ``wmlci/data/source_data/epa_data_commons/``. 
+API downloads (e.g. Federal LCA Commons) are saved to ``wmlci/data/source_data/{source}/``.
 
-### sourceData File Descriptions and Metadata
+### source_data File Descriptions and Metadata
 
 1. IPCC_LCIA_methods_1.2024-12.0
 
@@ -25,12 +27,3 @@ sourceData are stored as zip files on [USEPA's Data Commons](https://dmap-data-c
        - Download location: https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/US_electricity_baseline/datasets  
 
 5. warm_v16_openlca_database_2025-06-13
-
-
-
-
-
-
-
-
-

@@ -15,7 +15,7 @@ from bw2calc import LCA, LeastSquaresLCA
 from bw2io.importers.json_ld import JSONLDImporter
 import bw2data as bd
 
-from wmlci.settings import paths, sourcedatapath, errorlogsoutputpath
+from wmlci.settings import paths, error_logs_path
 from wmlci.log import log
 
 from esupy.remote import make_url_request
@@ -682,7 +682,7 @@ def check_for_errors_in_jsonld_import(jsonld):
     find_unallocatable_processes(jsonld)
     processes_with_no_outputs_or_ref_flow(jsonld)
     # todo: update the excel document name
-    check_default_providers(jsonld, errorlogsoutputpath/"WMLCI_Error_Logging", debug=False)
+    check_default_providers(jsonld, error_logs_path/"WMLCI_Error_Logging", debug=False)
 
 
 def validate_jsonld_exchanges(jsonld):

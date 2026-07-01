@@ -7,7 +7,7 @@ import zipfile
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
-from wmlci.settings import paths, sourcedatapath
+from wmlci.settings import epa_data_commons_path, paths
 from wmlci.log import log
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
@@ -20,6 +20,7 @@ from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_miss
 def download_source_data_from_remote(fname):
     """
     Download source data stored from USEPA's data commons to local directory
+    (``wmlci/data/source_data/epa_data_commons/``)
     :param fname: str, filename, must include extension (such as .zip)
     :return:
     """
@@ -31,7 +32,7 @@ def download_source_data_from_remote(fname):
     if r is not None:
         status = True
         # set subdirectory
-        folder = paths.local_path / 'sourceData'
+        folder = epa_data_commons_path
         mkdir_if_missing(folder)
         file = folder / fname
         with file.open('wb') as fi:
@@ -52,14 +53,14 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     :return:
     """
     # define path to source data
-    filepath = sourcedatapath / fname
+    filepath = epa_data_commons_path / fname
 
     # load jsonld source data from local directory. If data not found locally, download first, then load
     if not filepath.exists():
         download_source_data_from_remote(f"{fname}.zip")
-        with zipfile.ZipFile(f"{filepath}.zip", 'r') as zip_ref:
+        with zipfile.ZipFile(epa_data_commons_path / f"{fname}.zip", 'r') as zip_ref:
             zip_ref.extractall(filepath)
-        log.info(f"Unzipped {fname} to {sourcedatapath}")
+        log.info(f"Unzipped {fname} to {epa_data_commons_path}")
 
     if datatype == 'jsonld':
         log.info(f"Loading {filepath}")

@@ -19,7 +19,7 @@ from bw2calc import LCA
 
 from wmlci.excel_legacy import excel_legacy_score_kg_co2e
 from wmlci.log import log
-from wmlci.settings import wmlcioutputpath
+from wmlci.settings import resultspath
 
 _UNIT_LABEL = {
     "kilogram": "kg",
@@ -241,8 +241,8 @@ def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str
     summary_name = out.get("summary_csv", "lcia_results_summary.csv")
     detail_name = out.get("detail_csv", "lcia_results_detail.csv")
 
-    results_path = wmlcioutputpath / summary_name
-    detail_path = wmlcioutputpath / detail_name
+    results_path = resultspath / summary_name
+    detail_path = resultspath / detail_name
 
     # write the system-level summary to CSV
     results_df.to_csv(results_path, index=False)
