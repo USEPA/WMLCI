@@ -70,7 +70,7 @@ from bw2io.strategies.special import *
 import multifunctional
 
 from wmlci.settings import sourcedatapath
-from wmlci.common import *
+from wmlci.jsonld_loader import *
 
 ## Project Initiation ##
 

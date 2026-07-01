@@ -16,7 +16,7 @@ List of implemented fixes:
 ####################
 
 # Repository
-from wmlci.common import *
+from wmlci.jsonld_loader import *
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
 from wmlci.settings import datapath, errorlogsoutputpath, sourcedatapath
