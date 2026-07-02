@@ -41,11 +41,20 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
 
     bd.projects.set_current(config["bw_project_name"])
 
+    reimport_openlca = config.get("reimport_openlca", False)
+    reimport_lcia = config.get("reimport_lcia", False)
+    if reimport_openlca and not reimport_lcia:
+        # FEDEFL harmonization gives biosphere nodes new codes on each import
+        log.info(
+            "reimport_openlca is true — reimporting LCIA methods to relink CFs."
+        )
+        reimport_lcia = True
+
     db_name = config["openlca_db_name"]
     # If database exists, check that database is not empty - which occurs when
     # there are errors in the run; otherwise import and run
     if (
-        not config.get("reimport_openlca", False)
+        not reimport_openlca
         and db_name in bd.databases
         and len(bd.Database(db_name)) > 0
     ):
@@ -81,7 +90,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     methods_have_cfs = any(len(bd.Method(m).load()) > 0 for m in existing)
 
     if (
-        not config.get("reimport_lcia", False) and existing and methods_have_cfs
+        not reimport_lcia and existing and methods_have_cfs
     ):
         log.info("LCIA methods found - skipping LCIA import.")
     else:
@@ -120,11 +129,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     systems = resolve_systems(db, config)
     log.info(f"Assessing {len(systems)} system(s):")
     for act, product, system_settings in systems:
-        transport_mode = system_settings.get("transport", {}).get("mode")
-        log.info(
-            f"  - {act['name']} -> {product['name']} "
-            f"(transport: {transport_mode})"
-        )
+        log.info(f"  - {act['name']} -> {product['name']}")
 
     results_df, detail_df = calculate_lca_results(db, systems, config)
     paths = write_lca_outputs(results_df, detail_df, config)
@@ -139,7 +144,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         "detail": detail_df,
         "paths": paths,
         "systems": [
-            (a["name"], p["name"], s.get("transport", {}).get("mode"))
+            (a["name"], p["name"])
             for a, p, s in systems
         ],
     }

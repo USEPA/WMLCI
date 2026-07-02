@@ -101,4 +101,3 @@ def clean_JSONLD_sourceData(jsonld):
     jsonld = convert_param_list_to_dict(jsonld)
 
     return jsonld
-

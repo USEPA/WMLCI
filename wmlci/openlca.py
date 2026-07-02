@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 from bw2calc import LCA
 
-from wmlci.excel_legacy import excel_legacy_score_kg_co2e
 from wmlci.log import log
 from wmlci.settings import resultspath
 
@@ -151,12 +150,6 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
         # Functional unit: demand passed to Brightway in reference-product units (kg).
         # Default in v16.yaml is SHORT_TON_KG (~907.18 kg) per short ton.
         demand = float(system_settings["functional_unit"]["amount"])
-        transport_mode = system_settings.get("transport", {}).get(
-            "mode", "openlca_full"
-        )
-        log.info(
-            f"System '{activity['name']}' transport mode: {transport_mode}"
-        )
 
         try:
             func_unt, data_objs, _ = bd.prepare_lca_inputs(
@@ -173,11 +166,6 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
         fu_label = functional_unit_label(product.get("name", ""), fu_config)
 
         score = lca.score
-        if transport_mode == "excel_legacy":
-            # replace Brightway score with published Waste Reduction Model v16 pathway EF
-            excel_score = excel_legacy_score_kg_co2e(activity["name"], demand)
-            if excel_score is not None:
-                score = excel_score
 
         results.append({
             "system": activity["name"],
@@ -185,12 +173,9 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
             "functional_unit": fu_label,
             "location": activity.get("location", ""),
             "method": str(method),
-            "transport_mode": transport_mode,
             "score": score,
             "score_unit": METHOD_UNIT,
             "score_metric_ton_co2e": score / 1000,
-            "openlca_score": lca.score,
-            "openlca_score_metric_ton_co2e": lca.score / 1000,
         })
 
         # decompose the system score by process: characterized_inventory column sums
@@ -200,8 +185,11 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
         ci = lca.characterized_inventory  # biosphere flows x processes
         col_contributions = np.asarray(ci.sum(axis=0)).ravel()
         supply = np.asarray(lca.supply_array).ravel()
+        # drop the noise - the values that round to 0 and exist due to sparse matrix after run
         for idx in np.argsort(np.abs(col_contributions))[::-1]:
-            direct_contribution = col_contributions[idx]
+            direct_contribution = float(col_contributions[idx])
+            if abs(direct_contribution) < 1e-9:
+                continue
             proc = bd.get_activity(lca.dicts.activity.reversed[idx])
             meta = process_meta.get(proc.id, {})
 

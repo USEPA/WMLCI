@@ -1,4 +1,4 @@
-# Replicate Waste Reduction Model v16 Excel tool results using openLCA inventory data.
+# Replicate Waste Reduction Model v16 using openLCA inventory data.
 #
 # Models 3 material-pathway combinations:
 #   a) incineration + plastic
@@ -26,12 +26,10 @@ model_defaults:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-  transport:
-    mode: excel_legacy
+  transport:  # todo: note not used
     distance_miles: 20
-    openlca_input: null
 
-  landfill:
+  landfill:  # todo: note not used
     lfg: national_average
     collection: typical
     moisture: national_average

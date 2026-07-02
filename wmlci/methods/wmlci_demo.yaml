@@ -1,7 +1,7 @@
 # Updated Waste Reduction Model v16 excel tool data inputs.
 # Changes include:
 #   - Most recent IPCC data for GWP
-#   - Non-truncated transporation data.
+#   - Non-truncated transportation data (TODO: implement)
 #
 # Models 3 material-pathway combinations:
 #   a) incineration + plastic
@@ -22,19 +22,17 @@ reimport_lcia: false  # set to true to reimport/clean data
 
 ipcc_method:
   - IPCC
-  - AR6-100  # TODO: this method is not in our ipcc data
+  - AR6-20  # TODO: this method is not in our ipcc data AR6-100
 
 model_defaults:
   functional_unit:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-  transport:
-    mode: openlca_full
+  transport:  # todo: note not used
     distance_miles: 20
-    openlca_input: null
 
-  landfill:
+  landfill:  # todo: note not used
     lfg: national_average
     collection: typical
     moisture: national_average
