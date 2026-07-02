@@ -1,0 +1,17 @@
+# Federal LCA Commons — https://www.lcacommons.gov/lca-commons-api-guide
+# Get an API key: https://api.data.gov/signup/
+# Run: python -m wmlci.extract.download_source_data_from_api -s fed_lca_commons
+
+
+source_name: Federal LCA Commons
+source_url: https://www.lcacommons.gov/
+api_name: FLCAC
+format: json-ld
+time_delay: 0
+
+url:
+  base_url: https://api.nal.usda.gov/FederalLCACommonsapi
+  api_path: /search
+  url_params:
+    query: USLCI
+    api_key: __apiKey__

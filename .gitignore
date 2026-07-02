@@ -1,5 +1,8 @@
-# do not upload the warm data - it is too large
-wmlci/data/warm_v16_openlca_database_2025-06-13/
+# wmlci/data — source data downloads, results, logs (never push to GitHub)
+wmlci/data/
+
+# API keys for wmlci/extract (bedrock/flowsa pattern)
+wmlci/extract/API_Keys.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
