@@ -49,6 +49,7 @@ def return_method_meta(config):
             'api_name',
             'format',
             'api_key_required',
+            'date_published',
         ):
             if isinstance(v, dict):
                 continue

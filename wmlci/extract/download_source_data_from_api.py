@@ -100,7 +100,31 @@ def _read_token(resp) -> str:
     return token
 
 
-def _call_url_and_download_data(config: dict[str, Any], out_dir: Path) -> Path:
+def _fetch_date_published(config: dict[str, Any]) -> str | None:
+    """FLCAC dataset ``lastChange`` (website Last change) via API."""
+    source_url = config.get("source_url", "")
+    if "/lca-collaboration/" not in source_url or not config.get("api_name"):
+        return None
+
+    browse_path = (
+        "/browse/"
+        + source_url.split("/lca-collaboration/", 1)[1].replace("/dataset/", "/")
+    )
+    browse_url = _build_url(
+        {
+            **(config.get("url") or {}),
+            "api_path": browse_path,
+            "url_params": {"api_key": "__apiKey__"},
+        },
+        {"apiKey": _api_key(config)},
+    )
+    last_change = _request(browse_url).json().get("lastChange")
+    return str(last_change) if last_change else None
+
+
+def _call_url_and_download_data(
+    config: dict[str, Any], out_dir: Path, method_name: str
+) -> Path:
     shared_url = config.get("url") or {}
     steps = config.get("download_steps")
     subs: dict[str, str] = {}
@@ -150,7 +174,10 @@ def download_source_data(method_name: str) -> Path:
     config = _load_config(method_name)
     out_dir = source_data_path / method_name
     mkdir_if_missing(out_dir)
-    out_path = _call_url_and_download_data(config, out_dir)
+    out_path = _call_url_and_download_data(config, out_dir, method_name)
+    date_published = _fetch_date_published(config)
+    if date_published:
+        config["date_published"] = date_published
 
     meta = set_meta(method_name)
     meta.ext = out_path.suffix.lstrip(".") or "zip"
