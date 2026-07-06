@@ -13,13 +13,13 @@ openlca_input: warm613_v16_pilot_square_2025_12_11
 openlca_db_name: openlca_db
 reimport_openlca: false  # set to true to reimport/clean data
 
-lcia_input: IPCC_LCIA_methods_1.2024-12.0
+lcia_input: ipcc_gwp
 lcia_db_name: IPCC
 reimport_lcia: false  # set to true to reimport/clean data
 
 ipcc_method:
   - IPCC
-  - AR5-100  # TODO: want to use AR4-100 to replicate excel tool
+  - AR4-100
 
 model_defaults:
   functional_unit:
