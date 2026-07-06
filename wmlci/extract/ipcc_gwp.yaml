@@ -20,5 +20,4 @@ download_steps:
       api_path: /download/json/__token__
       url_params:
         api_key: __apiKey__
-    filename: Federal_LCA_Commons-IPCC_GWP.zip
     unzip: true

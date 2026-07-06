@@ -3,18 +3,26 @@ Functions common across datasets
 """
 
 import zipfile
+from pathlib import Path
 
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
-from wmlci.settings import epa_data_commons_path, paths
+from wmlci.settings import epa_data_commons_path, extractpath, paths, source_data_path
+from wmlci.extract.download_source_data_from_api import download_source_data
 from wmlci.log import log
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
 
 from esupy.remote import make_url_request
-from esupy.util import make_uuid
-from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
+from esupy.processed_data_mgmt import mkdir_if_missing
+
+
+def _jsonld_source_dir(fname: str) -> Path:
+    """Local directory containing JSON-LD for ``fname``."""
+    if (extractpath / f"{fname}.yaml").exists():
+        return source_data_path / fname / fname
+    return epa_data_commons_path / fname
 
 
 def download_source_data_from_remote(fname):
@@ -46,21 +54,19 @@ def download_source_data_from_remote(fname):
 
 def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     """
-    Load sourceData file. Checks for file in local directory, if does not exist, pulls file from USEPA's Data Commons
-    :param fname: str, filename for source data
-    :param datatype: str, 'jsonld' or 'jsonld_lcia'
-    :param bw_database_name: str, set database name, default name set to 'db'
-    :return:
+    Load sourceData file. If missing locally, download from an extract API yaml
+    when ``wmlci/extract/{fname}.yaml`` exists, otherwise from EPA Data Commons.
     """
-    # define path to source data
-    filepath = epa_data_commons_path / fname
+    filepath = _jsonld_source_dir(fname)
 
-    # load jsonld source data from local directory. If data not found locally, download first, then load
     if not filepath.exists():
-        download_source_data_from_remote(f"{fname}.zip")
-        with zipfile.ZipFile(epa_data_commons_path / f"{fname}.zip", 'r') as zip_ref:
-            zip_ref.extractall(filepath)
-        log.info(f"Unzipped {fname} to {epa_data_commons_path}")
+        if (extractpath / f"{fname}.yaml").exists():
+            download_source_data(fname)
+        else:
+            download_source_data_from_remote(f"{fname}.zip")
+            with zipfile.ZipFile(epa_data_commons_path / f"{fname}.zip", 'r') as zip_ref:
+                zip_ref.extractall(filepath)
+            log.info(f"Unzipped {fname} to {epa_data_commons_path}")
 
     if datatype == 'jsonld':
         log.info(f"Loading {filepath}")

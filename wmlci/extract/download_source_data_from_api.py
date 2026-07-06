@@ -115,17 +115,16 @@ def _call_url_and_download_data(config: dict[str, Any], out_dir: Path) -> Path:
 
         last = steps[-1]
         url = _build_url({**shared_url, **(last.get("url") or {})}, subs)
-        filename = last.get("filename") or config.get("filename")
+        filename = (
+            last.get("filename")
+            or config.get("filename")
+            or f"{method_name}.zip"
+        )
         unzip = last.get("unzip", config.get("unzip", False))
     else:
         url = _build_url(shared_url, subs)
-        filename = config.get("filename")
+        filename = config.get("filename") or f"{method_name}.zip"
         unzip = config.get("unzip", False)
-
-    if not filename:
-        raise ValueError(
-            "Extract yaml must set filename (or on the last download_steps entry)"
-        )
 
     out_path = out_dir / filename
     resp = _request(url)
