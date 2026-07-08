@@ -30,7 +30,7 @@ _UNIT_LABEL = {
 
 DETAIL_COLUMNS = [
     "location",
-    "system",
+    "process",
     "activity",
     "reference_product",
     "functional_unit",
@@ -88,9 +88,9 @@ def resolve_systems(db, config: dict[str, Any]):
 
     Per-system settings are expanded at config load time (``load_method_config``).
     """
-    systems_cfg = config.get("systems") or {}
+    systems_cfg = config.get("processes") or {}
     if not systems_cfg:
-        raise ValueError("config must include systems")
+        raise ValueError("config must include processes")
 
     by_name = {act["name"]: (act, prod) for act, prod in return_system_processes(db)}
     resolved = []
@@ -139,7 +139,7 @@ def build_process_meta(db) -> dict:
 
 def calculate_lca_results(db, systems, config: dict[str, Any]):
     """Run LCA for each system; return summary and detail DataFrames."""
-    method = tuple(config["ipcc_method"])
+    method = tuple(config["lcia_method"])
     # IPCC GWP methods are kg CO2 equivalents
     process_meta = build_process_meta(db)
 
@@ -168,7 +168,7 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
         score = lca.score
 
         results.append({
-            "system": activity["name"],
+            "process": activity["name"],
             "reference_product": product.get("name", ""),
             "functional_unit": fu_label,
             "location": activity.get("location", ""),
@@ -205,7 +205,7 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
 
             detail_rows.append({
                 "location": meta.get("location", proc.get("location", "")),
-                "system": activity["name"],
+                "process": activity["name"],
                 "activity": proc["name"],
                 "reference_product": meta.get("reference_product", ""),
                 "functional_unit": fu_label,
@@ -225,7 +225,7 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
 
 def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str, str]:
     """Write summary and detail CSVs; return output paths."""
-    out = config.get("output", {})
+    out = config.get("output_files", {})
     summary_name = out.get("summary_csv", "lcia_results_summary.csv")
     detail_name = out.get("detail_csv", "lcia_results_detail.csv")
 
@@ -242,7 +242,7 @@ def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str
     )
     log.info(
         f"Detailed results ({len(detail_df)} process rows across "
-        f"{detail_df['system'].nunique() if len(detail_df) else 0} systems) "
+        f"{detail_df['process'].nunique() if len(detail_df) else 0} processes) "
         f"written to {detail_path}"
     )
 

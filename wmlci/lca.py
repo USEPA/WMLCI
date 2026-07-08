@@ -41,26 +41,26 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
 
     bd.projects.set_current(config["bw_project_name"])
 
-    reimport_openlca = config.get("reimport_openlca", False)
+    reimport_processes = config.get("reimport_processes", False)
     reimport_lcia = config.get("reimport_lcia", False)
-    if reimport_openlca and not reimport_lcia:
+    if reimport_processes and not reimport_lcia:
         # FEDEFL harmonization gives biosphere nodes new codes on each import
         log.info(
-            "reimport_openlca is true — reimporting LCIA methods to relink CFs."
+            "reimport_processes is true — reimporting LCIA methods to relink CFs."
         )
         reimport_lcia = True
 
-    db_name = config["openlca_db_name"]
+    db_name = config["process_db_name"]
     # If database exists, check that database is not empty - which occurs when
     # there are errors in the run; otherwise import and run
     if (
-        not reimport_openlca
+        not reimport_processes
         and db_name in bd.databases
         and len(bd.Database(db_name)) > 0
     ):
         log.info(f"'{db_name}' is already present in the project - skipping import.")
     else:
-        source = config["openlca_input"]
+        source = config["process_input"]
         jsonld = load_JSONLD_sourceData(
             source, datatype="jsonld", bw_database_name=db_name
         )
@@ -107,19 +107,19 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
             jsonldlcia, sourcelistname="IPCC"
         )
-        jsonldlcia.match_biosphere_by_id(config["openlca_db_name"])
+        jsonldlcia.match_biosphere_by_id(config["process_db_name"])
         # drop the CFs that do not match a flow
         jsonldlcia.drop_unlinked(verbose=True)
         jsonldlcia.statistics()
         jsonldlcia.write_methods(overwrite=True)
 
-    db = bd.Database(config["openlca_db_name"])
+    db = bd.Database(config["process_db_name"])
     log.info(
-        f"Database '{config['openlca_db_name']}' loaded "
+        f"Database '{config['process_db_name']}' loaded "
         f"({len(db)} activities)"
     )
 
-    method = tuple(config["ipcc_method"])
+    method = tuple(config["lcia_method"])
     if method not in bd.methods:
         available = [m for m in bd.methods if config["lcia_db_name"] in m]
         raise ValueError(

@@ -30,15 +30,16 @@ def load_method_config(method_name: str) -> dict[str, Any]:
         config["method_name"] = method_name
 
     defaults = deepcopy(config.get("model_defaults") or {})
-    systems = config.get("systems")
-    if not systems:
+    processes = config.get("processes")
+    if not processes:
         raise ValueError(
-            f"Method '{method_name}' must define systems (every process to model)"
+            f"Method '{method_name}' must define processes, "
+            "include all processes to model."
         )
 
-    config["systems"] = {
+    config["processes"] = {
         name: _apply_system_specific_settings(defaults, overrides)
-        for name, overrides in systems.items()
+        for name, overrides in processes.items()
     }
     return config
 
