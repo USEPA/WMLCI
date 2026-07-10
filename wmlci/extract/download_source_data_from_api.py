@@ -190,7 +190,7 @@ def _call_url_and_download_data(
     out_path = out_dir / filename
     resp = _request(url)
     out_path.write_bytes(resp.content)
-    log.info(f"Saved {out_path} ({len(resp.content)} bytes)")
+    log.info(f"Downloading and extracting {out_path}")
 
     if unzip:
         if out_path.suffix.lower() != ".zip":
@@ -215,11 +215,15 @@ def download_source_data(method_name: str, version: str | None = None) -> Path:
 
     commit_id = None
     date_published = None
+    source_name = config.get("source_name", method_name)
     if version:
         commit_id, date_published = _fetch_flcac_source_metadata(config, version)
-        source_name = config.get("source_name", method_name)
         log.info(f"Returning version {version} of {source_name}")
 
+    log.info(
+        f"Beginning download of {source_name} - "
+        "this might take a while depending on data size"
+    )
     out_path = _call_url_and_download_data(
         config, out_dir, method_name, commit_id=commit_id
     )
