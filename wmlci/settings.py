@@ -13,7 +13,6 @@ datapath = MODULEPATH / "data"
 extractpath = MODULEPATH / "extract"
 
 source_data_path = datapath / "source_data"
-epa_data_commons_path = source_data_path / "epa_data_commons"
 resultspath = datapath / "results"
 logoutputpath = datapath / "logs"
 error_logs_path = datapath / "error_logs"
@@ -25,7 +24,6 @@ paths.local_path = datapath
 # ensure directories exist
 for d in [
     source_data_path,
-    epa_data_commons_path,
     resultspath,
     logoutputpath,
     error_logs_path,
