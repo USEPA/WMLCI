@@ -1,0 +1,14 @@
+technosphere_exchanges:
+  "Transport of MSW, by truck":
+    data_source: uslci
+    data_version: 1.2026-06.0
+    product: "Transport; single unit truck, short-haul; diesel powered"
+    process: "Transport, single unit truck; short-haul; diesel powered"
+  "Electricity generation, at grid, National":
+    data_source: us_electricity_baseline
+    data_version: 1.2026-06.0
+    product: "Electricity, AC, 120 V"
+    process: "Electricity; at user; consumption mix - US - US"
+
+# technosphere_exchange_drops:
+#   - "XXX"
