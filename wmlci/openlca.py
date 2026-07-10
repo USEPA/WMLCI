@@ -64,9 +64,12 @@ def return_process_product(db):
     return pairs
 
 
-def return_system_processes(db):
+def return_foreground_processes(db):
     """
-    Return the end-of-life material-pathway scenarios to run LCAs on.
+    Return foreground process/product pairs for LCA scenarios.
+
+    Foreground processes have a reference product that is not consumed elsewhere
+    in the technosphere.
     """
     consumed = set()
     for act in db:
@@ -75,28 +78,28 @@ def return_system_processes(db):
         for exc in act.technosphere():
             consumed.add(exc.input.id)
 
-    systems = []
+    fg = []
     for act, product in return_process_product(db):
         if product.id not in consumed:
-            systems.append((act, product))
-    return systems
+            fg.append((act, product))
+    return fg
 
 
-def resolve_systems(db, config: dict[str, Any]):
+def resolve_processes(db, config: dict[str, Any]):
     """
-    Match configured system names to database processes.
+    Match configured process names to database activities.
 
-    Per-system settings are expanded at config load time (``load_method_config``).
+    Per-process settings are expanded at config load time (``load_method_config``).
     """
-    systems_cfg = config.get("processes") or {}
-    if not systems_cfg:
+    processes_cfg = config.get("processes") or {}
+    if not processes_cfg:
         raise ValueError("config must include processes")
 
-    by_name = {act["name"]: (act, prod) for act, prod in return_system_processes(db)}
+    by_name = {act["name"]: (act, prod) for act, prod in return_foreground_processes(db)}
     resolved = []
     missing = []
 
-    for name, settings in systems_cfg.items():
+    for name, settings in processes_cfg.items():
         if name not in by_name:
             missing.append(name)
             continue
@@ -106,8 +109,8 @@ def resolve_systems(db, config: dict[str, Any]):
     if missing:
         available = sorted(by_name.keys())
         raise ValueError(
-            f"Systems not found in database: {missing}. "
-            f"Available root systems: {available}"
+            f"Processes not found in database: {missing}. "
+            f"Available foreground processes: {available}"
         )
     return resolved
 
@@ -137,19 +140,19 @@ def build_process_meta(db) -> dict:
     return process_meta
 
 
-def calculate_lca_results(db, systems, config: dict[str, Any]):
-    """Run LCA for each system; return summary and detail DataFrames."""
+def calculate_lca_results(db, processes, config: dict[str, Any]):
+    """Run LCA for each configured process scenario; return summary and detail DataFrames."""
     method = tuple(config["lcia_method"])
     # IPCC GWP methods are kg CO2 equivalents
     process_meta = build_process_meta(db)
 
-    results = []        # one row per system (summary)
-    detail_rows = []    # one row per process within each system (detailed)
+    results = []        # one row per scenario (summary)
+    detail_rows = []    # one row per activity within each scenario (detailed)
 
-    for activity, product, system_settings in systems:
+    for activity, product, process_settings in processes:
         # Functional unit: demand passed to Brightway in reference-product units (kg).
         # Default in v16.yaml is SHORT_TON_KG (~907.18 kg) per short ton.
-        demand = float(system_settings["functional_unit"]["amount"])
+        demand = float(process_settings["functional_unit"]["amount"])
 
         try:
             func_unt, data_objs, _ = bd.prepare_lca_inputs(
@@ -159,10 +162,10 @@ def calculate_lca_results(db, systems, config: dict[str, Any]):
             lca.lci()   # life cycle inventory: solves A^-1 f
             lca.lcia()  # life cycle impact assessment: C B A^-1 f
         except (ValueError, bc.errors.OutsideTechnosphere) as err:
-            log.warning(f"Skipping system '{activity['name']}': {err}")
+            log.warning(f"Skipping scenario '{activity['name']}': {err}")
             continue
 
-        fu_config = system_settings["functional_unit"]
+        fu_config = process_settings["functional_unit"]
         fu_label = functional_unit_label(product.get("name", ""), fu_config)
 
         score = lca.score
@@ -232,13 +235,13 @@ def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str
     results_path = resultspath / summary_name
     detail_path = resultspath / detail_name
 
-    # write the system-level summary to CSV
+    # write the scenario-level summary to CSV
     results_df.to_csv(results_path, index=False)
-    # write individual process results for all systems to csv
+    # write individual activity results for all scenarios to csv
     detail_df.to_csv(detail_path, index=False)
 
     log.info(
-        f"System summary for {len(results_df)} systems written to {results_path}"
+        f"Summary for {len(results_df)} scenarios written to {results_path}"
     )
     log.info(
         f"Detailed results ({len(detail_df)} process rows across "

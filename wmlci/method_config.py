@@ -38,16 +38,16 @@ def load_method_config(method_name: str) -> dict[str, Any]:
         )
 
     config["processes"] = {
-        name: _apply_system_specific_settings(defaults, overrides)
+        name: _apply_process_specific_settings(defaults, overrides)
         for name, overrides in processes.items()
     }
     return config
 
 
-def _apply_system_specific_settings(
+def _apply_process_specific_settings(
     defaults: dict[str, Any], overrides: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Merge per-system overrides into model_defaults (flowsa-style)."""
+    """Merge per-process overrides into model_defaults (flowsa-style)."""
     merged = deepcopy(defaults)
     if not overrides:
         return merged

@@ -2,6 +2,7 @@
 # Changes include:
 #   - Most recent IPCC data for GWP
 #   - Non-truncated transportation data (TODO: implement)
+#   - Improved electricity (TODO: implement)
 #
 # Models 3 material-pathway combinations:
 #   a) incineration + plastic
@@ -12,9 +13,9 @@ method_name: wmlci_demo
 
 bw_project_name: wmlci_demo
 
-process_input: warm613_v16_pilot_square_2025_12_11
-process_db_name: openlca_db
-reimport_processes: false  # set to true to reimport/clean data
+inventory_source: warm613_v16_pilot_square_2025_12_11
+inventory_database: openlca_db
+reimport_inventory: false  # set to true to reimport/clean data
 
 lcia_input: ipcc_gwp
 lcia_db_name: IPCC
@@ -29,10 +30,10 @@ model_defaults:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-  transport:  # todo: note not used
+  transport:  # todo: note not implemented
     distance_miles: 20
 
-  landfill:  # todo: note not used
+  landfill:  # todo: note not implemented
     lfg: national_average
     collection: typical
     moisture: national_average
@@ -40,8 +41,11 @@ model_defaults:
 
 processes:
   "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
+#    technosphere_updates: msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg
   "MSW combustion of Mixed Plastics": null
+#    technosphere_updates: msw_combustion_mixed_plastics
   "MSW recycling of Mixed Plastics": null
+#    technosphere_updates: msw_recycling_mixed_plastics
 
 output_files:
   summary_csv: wmlci_demo_lcia_results.csv

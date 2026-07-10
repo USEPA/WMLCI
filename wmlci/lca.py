@@ -17,7 +17,7 @@ from wmlci.errorLogging import check_for_errors_in_jsonld_import
 from wmlci.jsonld_loader import clean_JSONLD_sourceData, load_JSONLD_sourceData
 from wmlci.log import log
 from wmlci.method_config import load_method_config
-from wmlci.openlca import calculate_lca_results, resolve_systems, write_lca_outputs
+from wmlci.openlca import calculate_lca_results, resolve_processes, write_lca_outputs
 
 
 def run_bw_lca(method_name: str) -> dict[str, Any]:
@@ -32,7 +32,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     Returns
     -------
     dict
-        config, summary and detail DataFrames, output paths, and systems run.
+        config, summary and detail DataFrames, output paths, and scenarios run.
     """
     config = load_method_config(method_name)
     log.info(
@@ -41,26 +41,26 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
 
     bd.projects.set_current(config["bw_project_name"])
 
-    reimport_processes = config.get("reimport_processes", False)
+    reimport_inventory = config.get("reimport_inventory", False)
     reimport_lcia = config.get("reimport_lcia", False)
-    if reimport_processes and not reimport_lcia:
+    if reimport_inventory and not reimport_lcia:
         # FEDEFL harmonization gives biosphere nodes new codes on each import
         log.info(
-            "reimport_processes is true — reimporting LCIA methods to relink CFs."
+            "reimport_inventory is true — reimporting LCIA methods to relink CFs."
         )
         reimport_lcia = True
 
-    db_name = config["process_db_name"]
+    db_name = config["inventory_database"]
     # If database exists, check that database is not empty - which occurs when
     # there are errors in the run; otherwise import and run
     if (
-        not reimport_processes
+        not reimport_inventory
         and db_name in bd.databases
         and len(bd.Database(db_name)) > 0
     ):
         log.info(f"'{db_name}' is already present in the project - skipping import.")
     else:
-        source = config["process_input"]
+        source = config["inventory_source"]
         jsonld = load_JSONLD_sourceData(
             source, datatype="jsonld", bw_database_name=db_name
         )
@@ -107,15 +107,15 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
             jsonldlcia, sourcelistname="IPCC"
         )
-        jsonldlcia.match_biosphere_by_id(config["process_db_name"])
+        jsonldlcia.match_biosphere_by_id(config["inventory_database"])
         # drop the CFs that do not match a flow
         jsonldlcia.drop_unlinked(verbose=True)
         jsonldlcia.statistics()
         jsonldlcia.write_methods(overwrite=True)
 
-    db = bd.Database(config["process_db_name"])
+    db = bd.Database(config["inventory_database"])
     log.info(
-        f"Database '{config['process_db_name']}' loaded "
+        f"Database '{config['inventory_database']}' loaded "
         f"({len(db)} activities)"
     )
 
@@ -126,15 +126,15 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
             f"LCIA method {method} not in project. Available: {available[:10]}"
         )
 
-    systems = resolve_systems(db, config)
-    log.info(f"Assessing {len(systems)} system(s):")
-    for act, product, system_settings in systems:
+    processes = resolve_processes(db, config)
+    log.info(f"Assessing {len(processes)} scenarios:")
+    for act, product, process_settings in processes:
         log.info(f"  - {act['name']} -> {product['name']}")
 
-    results_df, detail_df = calculate_lca_results(db, systems, config)
+    results_df, detail_df = calculate_lca_results(db, processes, config)
     paths = write_lca_outputs(results_df, detail_df, config)
 
-    print("\nLCA results (all systems):")
+    print("\nLCA results (all scenarios):")
     print(results_df.to_string(index=False))
 
     return {
@@ -143,9 +143,9 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         "summary": results_df,
         "detail": detail_df,
         "paths": paths,
-        "systems": [
+        "scenarios": [
             (a["name"], p["name"])
-            for a, p, s in systems
+            for a, p, s in processes
         ],
     }
 
