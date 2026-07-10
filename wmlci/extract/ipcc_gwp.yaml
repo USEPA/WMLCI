@@ -2,6 +2,7 @@
 
 author: Federal LCA Commons
 source_name: IPCC GWP
+version: 1.2024-12.0
 source_url: https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/IPCC_GWP/dataset/IMPACT_METHOD/00feb6d9-9282-3bcf-9d18-7b040f516935
 api_name: FLCAC
 api_key_required: true
