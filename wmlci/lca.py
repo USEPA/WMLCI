@@ -17,7 +17,12 @@ from wmlci.errorLogging import check_for_errors_in_jsonld_import
 from wmlci.jsonld_loader import clean_JSONLD_sourceData, load_JSONLD_sourceData
 from wmlci.log import log
 from wmlci.method_config import load_method_config
-from wmlci.openlca import calculate_lca_results, resolve_processes, write_lca_outputs
+from wmlci.openlca import (
+    calculate_lca_results,
+    functional_unit_label,
+    resolve_processes,
+    write_lca_outputs,
+)
 
 
 def run_bw_lca(method_name: str) -> dict[str, Any]:
@@ -62,7 +67,10 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     else:
         source = config["inventory_source"]
         jsonld = load_JSONLD_sourceData(
-            source, datatype="jsonld", bw_database_name=db_name
+            source,
+            datatype="jsonld",
+            bw_database_name=db_name,
+            data_version=config.get("inventory_source_version"),
         )
         # split multi-product processes so the technosphere matrix is square
         jsonld = split_multi_product_processes(jsonld)
@@ -98,6 +106,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
             config["lcia_input"],
             datatype="jsonld_lcia",
             bw_database_name=lcia_db_name,
+            data_version=config.get("lcia_input_version"),
         )
         # convert parameter lists to dicts
         jsonldlcia = convert_lcia_param_list_to_dict(jsonldlcia)
@@ -127,9 +136,15 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         )
 
     processes = resolve_processes(db, config)
-    log.info(f"Assessing {len(processes)} scenarios:")
+    scenario_lines = []
     for act, product, process_settings in processes:
-        log.info(f"  - {act['name']} -> {product['name']}")
+        fu_label = functional_unit_label(
+            product.get("name", ""), process_settings["functional_unit"]
+        )
+        scenario_lines.append(f"  - {fu_label} by process: {act['name']}")
+    log.info(
+        f"Assessing {len(processes)} scenarios:\n" + "\n".join(scenario_lines)
+    )
 
     results_df, detail_df = calculate_lca_results(db, processes, config)
     paths = write_lca_outputs(results_df, detail_df, config)

@@ -11,6 +11,7 @@ import os
 import shutil
 import sys
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib import parse
@@ -100,30 +101,61 @@ def _read_token(resp) -> str:
     return token
 
 
-def _fetch_date_published(config: dict[str, Any]) -> str | None:
-    """FLCAC dataset ``lastChange`` (website Last change) via API."""
-    source_url = config.get("source_url", "")
-    if "/lca-collaboration/" not in source_url or not config.get("api_name"):
-        return None
+def source_data_dir(method_name: str, version: str | None = None) -> Path:
+    """Return the parent directory for a method's source data."""
+    if version is None:
+        version = _load_config(method_name).get("version")
+    if version:
+        return source_data_path / f"{method_name}_v{version.replace('.', '_')}"
+    return source_data_path / method_name
 
-    browse_path = (
-        "/browse/"
-        + source_url.split("/lca-collaboration/", 1)[1].replace("/dataset/", "/")
-    )
-    browse_url = _build_url(
+
+def _fetch_flcac_source_metadata(
+    config: dict[str, Any], version: str
+) -> tuple[str, str | None]:
+    """Return FLCAC source metadata for a version
+       returns: commit_id, date_published"""
+    source_url = config.get("source_url", "")
+    if "/lca-collaboration/" not in source_url:
+        raise ValueError(f"Cannot parse group/repo from source_url: {source_url}")
+    parts = source_url.split("/lca-collaboration/", 1)[1].split("/")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot parse group/repo from source_url: {source_url}")
+    group, repo = parts[0], parts[1]
+    repo_url = _build_url(
         {
             **(config.get("url") or {}),
-            "api_path": browse_path,
+            "api_path": f"/repository/{group}/{repo}",
             "url_params": {"api_key": "__apiKey__"},
         },
         {"apiKey": _api_key(config)},
     )
-    last_change = _request(browse_url).json().get("lastChange")
-    return str(last_change) if last_change else None
+    repo_info = _request(repo_url).json()
+    for release in repo_info.get("releases", []):
+        if release.get("version") != version:
+            continue
+        commit_id = str(release["id"])
+        settings = repo_info.get("settings", {})
+        release_date = release.get("releaseDate") or (
+            settings.get("releaseDate")
+            if settings.get("version") == version
+            else None
+        )
+        if release_date:
+            date_published = datetime.fromtimestamp(
+                int(release_date) / 1000
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            return commit_id, date_published
+        return commit_id, None
+    group_repo = repo_info.get("settings", {}).get("repositoryPath", f"{group}/{repo}")
+    raise ValueError(f"Version {version!r} not found in releases for {group_repo}")
 
 
 def _call_url_and_download_data(
-    config: dict[str, Any], out_dir: Path, method_name: str
+    config: dict[str, Any],
+    out_dir: Path,
+    method_name: str,
+    commit_id: str | None = None,
 ) -> Path:
     shared_url = config.get("url") or {}
     steps = config.get("download_steps")
@@ -133,7 +165,12 @@ def _call_url_and_download_data(
 
     if steps:
         for step in steps[:-1]:
-            prepare_url = _build_url({**shared_url, **(step.get("url") or {})}, subs)
+            step_url = {**shared_url, **(step.get("url") or {})}
+            if commit_id:
+                url_params = dict(step_url.get("url_params") or {})
+                url_params["commitId"] = commit_id
+                step_url["url_params"] = url_params
+            prepare_url = _build_url(step_url, subs)
             token_key = step.get("response_as", "token")
             subs[token_key] = parse.quote(_read_token(_request(prepare_url)), safe="")
 
@@ -169,13 +206,24 @@ def _call_url_and_download_data(
     return out_path
 
 
-def download_source_data(method_name: str) -> Path:
+def download_source_data(method_name: str, version: str | None = None) -> Path:
     """Download (and optionally unzip) source data for an extract method yaml."""
     config = _load_config(method_name)
-    out_dir = source_data_path / method_name
+    version = version or config.get("version")
+    out_dir = source_data_dir(method_name, version)
     mkdir_if_missing(out_dir)
-    out_path = _call_url_and_download_data(config, out_dir, method_name)
-    date_published = _fetch_date_published(config)
+
+    commit_id = None
+    date_published = None
+    if version:
+        commit_id, date_published = _fetch_flcac_source_metadata(config, version)
+        source_name = config.get("source_name", method_name)
+        log.info(f"Returning version {version} of {source_name}")
+
+    out_path = _call_url_and_download_data(
+        config, out_dir, method_name, commit_id=commit_id
+    )
+
     if date_published:
         config["date_published"] = date_published
 
