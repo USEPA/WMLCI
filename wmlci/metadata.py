@@ -45,6 +45,7 @@ def return_method_meta(config):
         if k in (
             'author',
             'source_name',
+            'version',
             'source_url',
             'api_name',
             'format',
