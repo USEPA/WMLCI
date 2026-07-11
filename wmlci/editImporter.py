@@ -445,10 +445,21 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
                 conversion_factor = 1.0
             if conversion_factor != 1 and "amount" in exchange:
                 if "amountFormula" in exchange:
-                    log.warning(
-                        f"ConversionFactor {conversion_factor} not applied to "
-                        f"parameterized exchange (process {process_k}, exchange "
-                        f"{idx}) because it has an amountFormula."
+                    original_formula = exchange["amountFormula"]
+                    unit = exchange.get("unit")
+                    if isinstance(unit, dict) and unit.get("name"):
+                        original_unit = unit["name"]
+                    else:
+                        original_unit = flow.get("refUnit") or "unknown unit"
+                    target_unit = target.get("TargetUnit")
+                    new_formula = f"({original_formula}) * {conversion_factor}"
+                    exchange["amountFormula"] = new_formula
+                    exchange["amount"] = exchange["amount"] * conversion_factor
+                    if "refUnit" in flow and target_unit:
+                        flow["refUnit"] = target_unit
+                    log.info(
+                        f"Formula '{original_formula}' [{original_unit}] updated to "
+                        f"'{new_formula}' [{target_unit or original_unit}]"
                     )
                 else:
                     exchange["amount"] = exchange["amount"] * conversion_factor
