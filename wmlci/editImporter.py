@@ -157,10 +157,20 @@ def apply_opposite_direction_approach(jsonld):
             else:
                 # Edit waste outputs from processes that are inputs to waste treatment
                 if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == False:
+                    if "amountFormula" in exchange:
+                        log.warning(
+                            f"amountFormula '{exchange['amountFormula']}' not "
+                            f"negated for waste flow opposite-direction edit."
+                        )
                     exchange["amount"] *= -1  # make value negative
                     exchange["isInput"] = True # make input
                 # Edit waste input to waste treatment
                 if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == True:
+                    if "amountFormula" in exchange:
+                        log.warning(
+                            f"amountFormula '{exchange['amountFormula']}' not "
+                            f"negated for waste flow opposite-direction edit."
+                        )
                     exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
                     exchange["isInput"] = False  # make output
