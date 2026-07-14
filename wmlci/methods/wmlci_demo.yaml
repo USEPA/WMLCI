@@ -10,16 +10,13 @@
 #   c) organics + landfill
 
 method_name: wmlci_demo
-
 bw_project_name: wmlci_demo
 
 inventory_source: warm613_v16_pilot_square_2025_12_11
 inventory_database: openlca_db
-reimport_inventory: true  # set to true to reimport/clean data
 
 lcia_input: ipcc_gwp
 lcia_db_name: IPCC
-reimport_lcia: true  # set to true to reimport/clean data
 
 lcia_method:
   - IPCC
