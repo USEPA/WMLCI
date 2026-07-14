@@ -679,6 +679,9 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
     ]
     mapping = mapping.drop_duplicates(subset=["SourceFlowUUID"], keep="first")
 
+    if sourcelistname == "WARM":
+        mapping = load_updated_warm_flowmapping(mapping)
+
     mapping_dict = (
         mapping.set_index("SourceFlowUUID")[
             [
@@ -735,27 +738,13 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
                 conversion_factor = 1.0
             if conversion_factor != 1 and "amount" in exchange:
                 if "amountFormula" in exchange:
-                    original_formula = exchange["amountFormula"]
-                    unit = exchange.get("unit")
-                    if isinstance(unit, dict) and unit.get("name"):
-                        original_unit = unit["name"]
-                    else:
-                        original_unit = flow.get("refUnit") or "unknown unit"
-                    target_unit = target.get("TargetUnit")
-                    new_formula = f"({original_formula}) * {conversion_factor}"
-                    exchange["amountFormula"] = new_formula
-                    exchange["amount"] = exchange["amount"] * conversion_factor
-                    if "refUnit" in flow and target_unit:
-                        flow["refUnit"] = target_unit
-                    log.info(
-                        f"Formula '{original_formula}' [{original_unit}] updated to "
-                        f"'{new_formula}' [{target_unit or original_unit}]"
+                    exchange["amountFormula"] = (
+                        f"({exchange['amountFormula']}) * {conversion_factor}"
                     )
-                else:
-                    exchange["amount"] = exchange["amount"] * conversion_factor
-                    target_unit = target.get("TargetUnit")
-                    if "refUnit" in flow and target_unit:
-                        flow["refUnit"] = target_unit
+                exchange["amount"] = exchange["amount"] * conversion_factor
+                target_unit = target.get("TargetUnit")
+                if "refUnit" in flow and target_unit:
+                    flow["refUnit"] = target_unit
 
     log.info(
         f"Harmonized {flows_remapped} flows and {exchanges_remapped} exchange "
