@@ -25,6 +25,9 @@ model_defaults:
 
 global_parameter_overrides:
   GWP_CH4: 25.0  # original amount output out of openlca data
+  transport_distance_landfilling: 20
+  transport_distance_combustion: 20
+  transport_distance_recycling: 20
 
 processes:
   "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions":
