@@ -80,17 +80,18 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     return jsonld
 
 
-def clean_JSONLD_sourceData(jsonld):
+def clean_JSONLD_sourceData(jsonld, config):
     """
     Apply standard cleaning functions after loading JSONLD data that address common issues in imported data.
     This function should be run before bw apply_strategies().
-    :param fname:
-    :param datatype:
-    :param bw_database_name:
-    :return:
+
+    ``config`` can include global/process parameter overrides for amountFormula
+    re-calc so exchange amounts are not static openLCA export values.
     """
     # map UUIDs to the federal elementary flowlist UUIDs
     jsonld = map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM")
+    # Recompute amounts from amountFormula
+    jsonld = recalculate_amounts_from_formulas(jsonld, config)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US
