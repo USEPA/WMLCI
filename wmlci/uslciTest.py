@@ -69,7 +69,7 @@ from bw2io.strategies import *
 from bw2io.strategies.special import *
 import multifunctional
 
-from wmlci.settings import epa_data_commons_path
+from wmlci.settings import source_data_path
 from wmlci.jsonld_loader import *
 
 ## Project Initiation ##
@@ -112,7 +112,7 @@ clean_all_locations(uslci)
 ## Import LCIA Methods ##
 
 # Importing IPCC via the JSONLDLCIAImporter
-lciapath = epa_data_commons_path / 'IPCC_LCIA_methods_1.2024-12.0'
+lciapath = source_data_path / 'IPCC_LCIA_methods_1.2024-12.0'
 IPCC = JSONLDLCIAImporter(lciapath)
 
 # Apply strategies to LCIA, evaluate linkages, match biosphere flows to characterization factors

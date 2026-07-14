@@ -12,6 +12,7 @@ inventory_source: warm613_v16_pilot_square_2025_12_11
 inventory_database: openlca_db
 
 lcia_input: ipcc_gwp
+lcia_input_version: 1.2024-12.0
 lcia_db_name: IPCC
 
 lcia_method:
