@@ -23,7 +23,7 @@ parameters:
   fugitive_CH4_distillate: 1.7117279037324228e-05
   fugitive_CH4_residual_oil: 1.7117279037324228e-05
   Gallons_to_Liters: 3.78541178
-  GWP_CH4: 25.0  # TODO: update to AR6
+  GWP_CH4: 29.8  # TODO: check want to use AR6 fossil
   hdpe_in_mixed_plastics: 0.397435897435897
   kWh_per_BTU_CH4: 8.547008547008547e-05
   MMBTU_to_kWh: 293.083235638921
