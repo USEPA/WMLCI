@@ -26,14 +26,8 @@ model_defaults:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-  transport:  # todo: note not used
-    distance_miles: 20
-
-  landfill:  # todo: note not used
-    lfg: national_average
-    collection: typical
-    moisture: national_average
-    transport_miles: 20
+global_parameter_overrides:
+  GWP_CH4: 25.0  # original amount output out of openlca data
 
 processes:
   "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions":
