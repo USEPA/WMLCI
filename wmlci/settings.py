@@ -12,6 +12,8 @@ datapath = MODULEPATH / "data"
 
 extractpath = MODULEPATH / "extract"
 
+model_defaults_path = MODULEPATH / "utils" / "model_defaults"
+
 source_data_path = datapath / "source_data"
 epa_data_commons_path = source_data_path / "epa_data_commons"
 resultspath = datapath / "results"
