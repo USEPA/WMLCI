@@ -2,15 +2,21 @@
 Functions to clean up imported olca data and generate square technosphere matrix
 """
 
+import re
+from io import StringIO
+from typing import Any, Set
+
 import fedelemflowlist
 import pandas as pd
+import yaml
 
 from bw2io.importers.json_ld import JSONLDImporter
 
 from wmlci.errorLogging import validate_jsonld_exchanges
 from wmlci.log import log
+from wmlci.settings import model_defaults_path
 
-from typing import Set
+from esupy.remote import make_url_request
 
 # values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
 _NO_TARGET = {"n.a.", "nan", "none", ""}
@@ -364,6 +370,280 @@ def convert_lcia_param_list_to_dict(jsonld):
             lcia_cat["parameters"] = params_dict
 
     return jsonld
+
+
+##############################################################
+### Recalc amountFormula from model defaults / overrides ###
+##############################################################
+
+_FORMULA_KEYWORDS = {"if", "else", "e"}
+
+
+def _load_model_defaults() -> tuple[
+    dict[str, float], dict[str, str], dict[str, dict[str, float]]
+]:
+    """Load global + process defaults from ``utils/model_defaults/``."""
+    with (model_defaults_path / "global_defaults.yaml").open(encoding="utf-8") as f:
+        global_raw = yaml.safe_load(f) or {}
+    values = {
+        str(k): float(v) for k, v in (global_raw.get("parameters") or {}).items()
+    }
+    derived = {
+        str(name): str(spec["formula"])
+        for name, spec in (global_raw.get("derived") or {}).items()
+        if isinstance(spec, dict) and spec.get("formula")
+    }
+
+    with (model_defaults_path / "process_parameters.yaml").open(encoding="utf-8") as f:
+        process_raw = yaml.safe_load(f) or {}
+    process_defaults = {
+        str(proc): {str(k): float(v) for k, v in (params or {}).items()}
+        for proc, params in (process_raw.get("process_parameters") or {}).items()
+    }
+    return values, derived, process_defaults
+
+
+def _translate_olca_formula(formula: str) -> str:
+    """Translate openLCA formula syntax into Python syntax so it can be evaluated"""
+    expr = str(formula).strip()
+
+    def _split_if_args(inside: str) -> tuple[str, str, str] | None:
+        parts, depth, start = [], 0, 0
+        for i, ch in enumerate(inside):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif ch == ";" and depth == 0:
+                parts.append(inside[start:i])
+                start = i + 1
+        parts.append(inside[start:])
+        return (parts[0], parts[1], parts[2]) if len(parts) == 3 else None
+
+    for _ in range(50):
+        idx = expr.lower().find("if(")
+        if idx < 0:
+            break
+        open_paren = idx + 2
+        depth, close = 0, None
+        for i in range(open_paren, len(expr)):
+            if expr[i] == "(":
+                depth += 1
+            elif expr[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    close = i
+                    break
+        if close is None:
+            break
+        split = _split_if_args(expr[open_paren + 1 : close])
+        if split is None:
+            break
+        cond, then, else_ = split
+        expr = f"{expr[:idx]}(({then}) if ({cond}) else ({else_})){expr[close + 1:]}"
+    return expr
+
+
+def _evaluate_expression(formula: str, env: dict[str, float]) -> float:
+    """Evaluate Python formula (case-insensitive parameter names)."""
+    py_expr = _translate_olca_formula(formula)
+    lookup = {k.lower(): k for k in env}
+
+    def repl_name(match: re.Match) -> str:
+        token = match.group(0)
+        if token.lower() in _FORMULA_KEYWORDS:
+            return token
+        canon = lookup.get(token.lower())
+        if canon is None:
+            raise KeyError(f"Unknown parameter '{token}' in formula '{formula}'")
+        return canon
+
+    py_expr = re.sub(r"[A-Za-z_][A-Za-z0-9_]*", repl_name, py_expr)
+    try:
+        return float(eval(py_expr, {"__builtins__": {}}, dict(env)))  # noqa: S307
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to evaluate formula '{formula}' (-> '{py_expr}'): {exc}"
+        ) from exc
+
+
+def _evaluate_dependent_formulas(
+    values: dict[str, float], formulas: dict[str, str]
+) -> dict[str, float]:
+    """evaluate dependent parameter formulas"""
+    env, pending = dict(values), dict(formulas)
+    for _ in range(len(pending) + 5):
+        if not pending:
+            return env
+        progressed = False
+        known = {k.lower(): k for k in {**env, **dict.fromkeys(pending, 0.0)}}
+        for name, formula in list(pending.items()):
+            needed = set()
+            for t in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", formula):
+                if t.lower() in _FORMULA_KEYWORDS:
+                    continue
+                canon = known.get(t.lower())
+                if canon is None:
+                    needed.add(t)
+                elif canon in pending and canon != name:
+                    needed.add(canon)
+            if needed:
+                continue
+            env[name] = _evaluate_expression(formula, env)
+            del pending[name]
+            progressed = True
+        if not progressed:
+            break
+    if pending:
+        raise ValueError(
+            "Could not resolve dependent parameter formulas (cycle or missing "
+            f"inputs): {sorted(pending)}"
+        )
+    return env
+
+
+def _process_param_dict(process: dict) -> tuple[dict[str, float], dict[str, str]]:
+    """Split process parameters into input values and derived formulas."""
+    values: dict[str, float] = {}
+    formulas: dict[str, str] = {}
+    params = process.get("parameters") or {}
+    items = params.values() if isinstance(params, dict) else params
+    for p in items:
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        name, formula, value = p["name"], p.get("formula"), p.get("value")
+        is_input = p.get("isInputParameter", True)
+        if formula and not is_input:
+            formulas[name] = str(formula)
+            if value is not None:
+                values[name] = float(value)
+        elif value is not None:
+            values[name] = float(value)
+        elif formula:
+            formulas[name] = str(formula)
+    return values, formulas
+
+
+def recalculate_amounts_from_formulas(jsonld, config: dict[str, Any]):
+    """
+    Recompute exchange amounts from amountFormula using model defaults and
+    optional method YAML overrides. Process-derived formulas come from JSON-LD.
+    """
+    global_values, global_derived, process_defaults = _load_model_defaults()
+    for name, val in (config.get("global_parameter_overrides") or {}).items():
+        global_values[str(name)] = float(val)
+        global_derived.pop(str(name), None)
+    process_overrides = config.get("process_parameter_overrides") or {}
+
+    env_global = _evaluate_dependent_formulas(global_values, global_derived)
+
+    n_formula = n_errors = 0
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        if process.get("type") in {"emission", "product"}:
+            continue
+        process_name = process.get("name", process_id)
+        proc_vals, proc_forms = _process_param_dict(process)
+        proc_vals.update(process_defaults.get(process_name) or {})
+        for k, v in (process_overrides.get(process_name) or {}).items():
+            proc_vals[str(k)] = float(v)
+            proc_forms.pop(str(k), None)
+
+        env = {**env_global, **proc_vals}
+        try:
+            env = _evaluate_dependent_formulas(env, proc_forms)
+        except Exception as exc:
+            n_errors += 1
+            log.warning(
+                f"Dependent parameter evaluation failed for process "
+                f"{process_name!r}: {exc}"
+            )
+            continue
+
+        params = process.get("parameters") or {}
+        for p in (params.values() if isinstance(params, dict) else params):
+            if isinstance(p, dict) and p.get("name") in env:
+                p["value"] = env[p["name"]]
+
+        for exchange in process.get("exchanges", []):
+            formula = exchange.get("amountFormula")
+            if not formula:
+                continue
+            n_formula += 1
+            try:
+                exchange["amount"] = _evaluate_expression(formula, env)
+            except Exception as exc:
+                n_errors += 1
+                log.warning(
+                    f"amountFormula recalc failed for process {process_name!r}, "
+                    f"flow={(exchange.get('flow') or {}).get('name')!r}: {exc}"
+                )
+
+    log.info(
+        f"Re-evaluated {n_formula} amountFormula exchanges ({n_errors} errors)."
+    )
+    return jsonld
+
+
+##############################################################
+### Flowmapping                                            ###
+##############################################################
+
+def load_updated_warm_flowmapping(mapping):
+    """
+    Override fedelemflowlist WARM mappings with the To FEDEFL section from
+    uslci-content (https://github.com/FLCAC-admin/uslci-content).
+    """
+    url = (
+        "https://raw.githubusercontent.com/FLCAC-admin/uslci-content/dev/"
+        "docs/supporting_docs/WARM/WARM%20flow%20mappings.csv"
+    )
+    r = make_url_request(url)
+    if r is None:
+        log.warning(
+            f"Could not access updated FEDEFL mappings from {url}; "
+            "using fedelemflowlist mapping file only."
+        )
+        return mapping
+
+    text = r.content.decode("utf-8")
+    start = text.find("To FEDEFL")
+    if start < 0:
+        return mapping
+    rest = text[text.find("\n", start) + 1 :]
+    end = rest.find("\nTo ")
+    fedefl = rest[:end] if end >= 0 else rest
+
+    overrides = pd.read_csv(
+        StringIO(fedefl),
+        sep=";",
+        header=None,
+        usecols=[0, 1, 2, 6, 7, 14, 16],
+        names=[
+            "SourceFlowUUID",
+            "TargetFlowUUID",
+            "ConversionFactor",
+            "TargetFlowName",
+            "TargetFlowContext",
+            "SourceUnit",
+            "TargetUnit",
+        ],
+    ).dropna(subset=["SourceFlowUUID", "TargetFlowUUID"])
+    if overrides.empty:
+        return mapping
+
+    overrides["TargetFlowContext"] = (
+        overrides["TargetFlowContext"]
+        .astype(str)
+        .str.removeprefix("Elementary flows/")
+    )
+    mapping = mapping.set_index("SourceFlowUUID")
+    mapping.update(overrides.set_index("SourceFlowUUID"))
+    mapping = mapping.reset_index()
+    log.info(
+        f"Applied {len(overrides)} WARM FEDEFL override mappings "
+        f"from uslci-content."
+    )
+    return mapping
 
 
 def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
