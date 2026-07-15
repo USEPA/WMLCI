@@ -12,6 +12,8 @@ datapath = MODULEPATH / "data"
 
 extractpath = MODULEPATH / "extract"
 
+model_defaults_path = MODULEPATH / "utils" / "model_defaults"
+
 source_data_path = datapath / "source_data"
 resultspath = datapath / "results"
 logoutputpath = datapath / "logs"

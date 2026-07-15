@@ -75,6 +75,7 @@ packages = ["wmlci"]
 "wmlci/methods" = "wmlci/methods"
 "wmlci/extract" = "wmlci/extract"
 "wmlci/technosphere_updates" = "wmlci/technosphere_updates"
+"wmlci/utils" = "wmlci/utils"
 
 [tool.hatch.metadata]
 allow-direct-references = true # required for github packages

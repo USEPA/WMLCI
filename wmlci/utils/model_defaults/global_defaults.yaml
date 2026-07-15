@@ -1,0 +1,49 @@
+# Model-wide global parameters
+# Method YAML: global_parameter_overrides:
+#   transport_distance_landfilling: XX
+
+parameters:
+  C_content_diesel: 0.02017
+  C_content_distillate: 20.17
+  C_content_residual_oil: 20.48
+  C_initial_content_food_waste: 0.521833597827365
+  C_storage_food_waste: 0.125833597827365
+  C_to_CO2: 3.66666666666667
+  CH4_calorific_value: 1012.0
+  CH4_emitted_no_LFG_recovery: 0.9
+  CH4_to_C: 0.75
+  combination_truck_EF_gal_tn_mi: 0.013383231
+  density_CH4_for_electricity: 20.0
+  density_CH4_standard: 0.7142857142857143
+  Diesel_energy_consumption_operation: 230800.0
+  energy_content_diesel: 0.1591
+  energy_content_distillate: 0.14
+  energy_content_residual_oil: 0.15
+  energy_diesel_life_cycle: 42.029773574593776
+  fugitive_CH4_distillate: 1.7117279037324228e-05
+  fugitive_CH4_residual_oil: 1.7117279037324228e-05
+  Gallons_to_Liters: 3.78541178
+  GWP_CH4: 29.8  # TODO: check want to use AR6 fossil
+  hdpe_in_mixed_plastics: 0.397435897435897
+  kWh_per_BTU_CH4: 8.547008547008547e-05
+  MMBTU_to_kWh: 293.083235638921
+  moisture_content_food_waste: 0.714790331253443
+  net_capacity: 0.85
+  percentage_energy_recovery: 0.66485
+  percentage_flaring: 0.255514
+  percentage_no_recovery: 0.079637
+  pet_in_mixed_plastics: 0.602564102564103
+  system_down_time: 0.03
+  tonne_to_sh_tn: 1.10231131092439
+  transport_distance_combustion: 20.0
+  transport_distance_landfilling: 20.0
+  transport_distance_recycling: 20.0
+  yield_CH4_food_waste: 369.0
+
+derived:
+  fugitive_CH4_diesel:
+    formula: (1.6*(44/12)/22)/2686/5.8
+  lb_to_sh_tn:
+    formula: 1/2000
+  transmission_and_distribution_losses:
+    formula: 0.84/14.46
