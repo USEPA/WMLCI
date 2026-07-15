@@ -36,12 +36,12 @@ model_defaults:
 #     recovered_material: XX
 
 processes:
-  "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
-#    technosphere_updates: msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg
-  "MSW combustion of Mixed Plastics": null
-#    technosphere_updates: msw_combustion_mixed_plastics
-  "MSW recycling of Mixed Plastics": null
-#    technosphere_updates: msw_recycling_mixed_plastics
+  "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions":
+    technosphere_updates: msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg
+  "MSW combustion of Mixed Plastics":
+    technosphere_updates: msw_combustion_mixed_plastics
+  "MSW recycling of Mixed Plastics":
+    technosphere_updates: msw_recycling_mixed_plastics
 
 output_files:
   summary_csv: wmlci_demo_lcia_results.csv
