@@ -41,7 +41,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     """
     config = load_method_config(method_name)
     log.info(
-        f"Running Brightway LCA method: {config.get('method_name', method_name)}"
+        f"Running LCA method: {config.get('method_name', method_name)}"
     )
 
     bd.projects.set_current(config["bw_project_name"])
