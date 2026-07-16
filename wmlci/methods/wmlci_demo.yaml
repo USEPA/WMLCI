@@ -10,17 +10,14 @@
 #   c) organics + landfill
 
 method_name: wmlci_demo
-
 bw_project_name: wmlci_demo
 
 inventory_source: warm613_v16_pilot_square_2025_12_11
 inventory_database: openlca_db
-reimport_inventory: false  # set to true to reimport/clean data
 
 lcia_input: ipcc_gwp
 lcia_input_version: 1.2024-12.0
 lcia_db_name: IPCC
-reimport_lcia: false  # set to true to reimport/clean data
 
 lcia_method:
   - IPCC
@@ -31,14 +28,12 @@ model_defaults:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-  transport:  # todo: note not implemented
-    distance_miles: 20
+# global_parameter_overrides:
+#   transport_distance_landfilling: XX
 
-  landfill:  # todo: note not implemented
-    lfg: national_average
-    collection: typical
-    moisture: national_average
-    transport_miles: 20
+# process_parameter_overrides:
+#   "MSW recycling of PET":
+#     recovered_material: XX
 
 processes:
   "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
