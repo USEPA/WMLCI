@@ -32,7 +32,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     Parameters
     ----------
     method_name
-        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_demo``).
+        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_pilot``).
 
     Returns
     -------

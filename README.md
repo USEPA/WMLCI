@@ -16,7 +16,7 @@ Methods are defined in YAML files in `wmlci/methods/`.
 
 Available methods:
    1. `v16`: replicates the v16 Excel tool for 3 processes
-   2. `wmlci_demo`: updated approach to the 3 processes
+   2. `wmlci_pilot`: updated approach to the 3 processes
 
 To run in Python:
 
