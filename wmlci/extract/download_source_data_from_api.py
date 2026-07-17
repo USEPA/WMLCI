@@ -9,24 +9,23 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib import parse
 
-import yaml
 from dotenv import load_dotenv
 from esupy.processed_data_mgmt import mkdir_if_missing
 from esupy.remote import make_url_request
 
+from wmlci.extract.extract_common import (
+    API_KEYS_ENV_PATH,
+    load_extract_yaml,
+    source_data_dir,
+)
 from wmlci.log import log
 from wmlci.metadata import set_meta, write_metadata
-from wmlci.settings import source_data_path
-
-EXTRACTPATH = Path(__file__).resolve().parent
-API_KEYS_ENV_PATH = EXTRACTPATH / "API_Keys.env"
 
 
 class APIError(Exception):
@@ -37,14 +36,6 @@ class APIError(Exception):
             f"API key '{api_source}' not found in {API_KEYS_ENV_PATH}. "
             "Add key to API_Keys.env."
         )
-
-
-def _load_config(method_name: str) -> dict[str, Any]:
-    path = EXTRACTPATH / f"{method_name}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"Extract config not found: {path}")
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
 
 
 def _api_key(config: dict[str, Any]) -> str:
@@ -99,15 +90,6 @@ def _read_token(resp) -> str:
     if not token:
         raise RuntimeError("No token in prepare response")
     return token
-
-
-def source_data_dir(method_name: str, version: str | None = None) -> Path:
-    """Return the parent directory for a method's source data."""
-    if version is None:
-        version = _load_config(method_name).get("version")
-    if version:
-        return source_data_path / f"{method_name}_v{version.replace('.', '_')}"
-    return source_data_path / method_name
 
 
 def _fetch_flcac_source_metadata(
@@ -208,7 +190,7 @@ def _call_url_and_download_data(
 
 def download_source_data(method_name: str, version: str | None = None) -> Path:
     """Download (and optionally unzip) source data for an extract method yaml."""
-    config = _load_config(method_name)
+    config = load_extract_yaml(method_name)
     version = version or config.get("version")
     out_dir = source_data_dir(method_name, version)
     mkdir_if_missing(out_dir)

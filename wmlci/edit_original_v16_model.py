@@ -3,32 +3,32 @@ Import unedited Waste Reduction Model v16.
 
 Prioritize key waste treatment pathways by removing all processes except:
     1) MSW combustion of Mixed Plastics
-    2) MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions
+    2) MSW landfilling of Food Waste; National average LFG recovery, typical
+       collection, National average conditions
     3) MSW recycling of Mixed Plastics
+
+These processes are specified in waste_reduction_model_v16_pilot.yaml.
 
 Fix known issues.
 """
 
-from wmlci.jsonld_loader import load_JSONLD_sourceData
+from __future__ import annotations
 
+import json
+import shutil
 from collections import deque
+from pathlib import Path
 
+from wmlci.jsonld_loader import load_JSONLD_sourceData
 from wmlci.log import log
+from wmlci.settings import source_data_path
 
-# Import JSON file
-json_ld = load_JSONLD_sourceData('waste_reduction_model_v16', datatype="jsonld", bw_database_name='db')
-
-# key processes that won't be removed from the database
-processes_keep = ['e847ff05-48e3-4df0-ae4d-db2bafe56baf', # mixed plastics combustion
-                  'b7eb29f9-d173-4ec5-9710-5f451b6bbfce', # food waste landfilling
-                  '1b246a12-d894-4381-ab43-f93c86c59b6f'] # mixed plastics recycling
-
-### Method definitions
 
 def prune_to_supply_chain(importer, process_ids):
     """
     Takes jsonld importer and a list of uuids as arguments.
-    Retains processes in list, default providers of exchanges from processes in list, and flows from both prior items.
+    Retains processes in list, default providers of exchanges from those
+    processes, and flows from both prior items.
     Removes all other processes and flows.
     """
     processes = importer.data["processes"]
@@ -90,6 +90,7 @@ def prune_to_supply_chain(importer, process_ids):
     }
     return importer
 
+
 def remove_processes(importer, process_uuids):
     """
     Remove processes and exchanges that reference them as default providers.
@@ -127,6 +128,7 @@ def remove_processes(importer, process_uuids):
     )
 
     return importer
+
 
 def remove_flows(importer, flow_uuids):
     """
@@ -170,6 +172,7 @@ def remove_flows(importer, flow_uuids):
 
     return importer
 
+
 def avoided_product_to_technosphere(importer):
     """
     Convert avoided product exchanges into technosphere exchanges.
@@ -203,7 +206,7 @@ def avoided_product_to_technosphere(importer):
 
                 if amount_formula:
                     # Only make edit if the amount is greater than 0
-                    if not amount_formula.startswith("-1*") and amount>0:
+                    if not amount_formula.startswith("-1*") and amount > 0:
                         exchange["amountFormula"] = f"-1*{amount_formula}"
                         exchange["amount"] = -1 * amount
 
@@ -212,6 +215,7 @@ def avoided_product_to_technosphere(importer):
     log.info(f"Modified {exchanges_modified} avoided product exchange(s).")
 
     return importer
+
 
 def fix_transport_equation(importer):
     """
@@ -243,6 +247,7 @@ def fix_transport_equation(importer):
 
     return importer
 
+
 def rename_parameters(importer, parameter_updates):
     """
     Rename parameters in importer.data["parameters"] using a mapping of
@@ -270,30 +275,74 @@ def rename_parameters(importer, parameter_updates):
 
 ### Apply methods
 
-# Remove processes that are not key processes or their upstream processes
-json_ld = prune_to_supply_chain(json_ld, processes_keep)
+def make_pilot(
+    method_name=None,
+    config=None,
+    output_dir=None,
+    bw_database_name="db",
+):
+    """Build the pilot JSON-LD source data product from original data input"""
+    config = config or {}
+    base_source = config.get("base_source")
+    json_ld = load_JSONLD_sourceData(
+        base_source,
+        datatype="jsonld",
+        bw_database_name=bw_database_name,
+    )
 
-# Remove processes and references to them in defaultProviders
-processes_remove = ['bfabc9c0-f0e1-432b-ba2e-600d3119f2d1'] # Wood chipping process
-json_ld = remove_processes(json_ld, processes_remove)
+    log.info("The clean up process might take a while")
+    if config.get("processes_keep"):
+        # Remove processes that are not key processes or their upstream processes
+        json_ld = prune_to_supply_chain(json_ld, config["processes_keep"])
+    if config.get("processes_remove"):
+        # Remove processes and references to them in defaultProviders
+        json_ld = remove_processes(json_ld, config["processes_remove"])
+    if config.get("flows_remove"):
+        # Remove exchanges from processes and data.flows
+        json_ld = remove_flows(json_ld, config["flows_remove"])
 
-# Remove exchanges from processes and data.flows
-flows_remove = [
-    "f45fbcf0-24f0-4ce1-b1d9-78f2ed0d5a34", # Jobs flow
-    "c9f2c667-eeab-448e-9c0c-6da04000fda6", # Taxes flow
-    "8c2daef6-fd94-410b-a258-7df1f02c1bce", # Wages flow
-    "24ecda7d-7c05-45f6-94d2-005924940d26", # Wood chipping flow
-    "e3b06ae8-cedf-4bb7-a864-ff8c4c0950e9", # Steel, recycled flow
-    "bad888b4-4615-4904-953f-c67d2ca5f41f"  # Other means of transport flow
-]
-json_ld = remove_flows(json_ld, flows_remove)
+    # Convert avoided products to negative technosphere flows
+    json_ld = avoided_product_to_technosphere(json_ld)
 
-# Convert avoided products to negative technosphere flows
-json_ld = avoided_product_to_technosphere(json_ld)
+    # Fix transport exchange formula
+    json_ld = fix_transport_equation(json_ld)
 
-# Fix transport exchange formula
-json_ld = fix_transport_equation(json_ld)
+    # fix parameter names - capitalization
+    json_ld = rename_parameters(
+        json_ld,
+        {"fbf4145a-5f38-4b45-aa7c-ff4d5a44f95d": "Fugitive_CH4_diesel"},
+    )
 
-# fix parameter names
-param_fixes = {"fbf4145a-5f38-4b45-aa7c-ff4d5a44f95d":'Fugitive_CH4_diesel'}
-json_ld = rename_parameters(json_ld, param_fixes)
+    # Start from a full copy of the source JSON-LD tree, then overwrite any
+    # entity folders that exist in both the copy and the in-memory model.
+    source_dir = source_data_path / base_source
+    output_dir = Path(output_dir or source_data_path / method_name)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_dir, output_dir)
+
+    for folder in sorted(p for p in output_dir.iterdir() if p.is_dir()):
+        entities = json_ld.data.get(folder.name)
+        if not isinstance(entities, dict):
+            continue
+        shutil.rmtree(folder)
+        folder.mkdir()
+        for entity_id, entity in entities.items():
+            # Drop bw2io's internal "filename" key before writing.
+            entity = {k: v for k, v in entity.items() if k != "filename"}
+            with (folder / f"{entity_id}.json").open("w", encoding="utf-8") as f:
+                json.dump(entity, f, indent=2)
+
+    log.info(
+        f"Wrote {output_dir} with "
+        f"{len(json_ld.data['processes'])} process(es) and "
+        f"{len(json_ld.data['flows'])} flow(s)."
+    )
+    return output_dir
+
+
+if __name__ == "__main__":
+    from wmlci.extract.extract_common import extract_source_data
+
+    extract_source_data("waste_reduction_model_v16_pilot")

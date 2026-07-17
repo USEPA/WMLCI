@@ -3,29 +3,18 @@ Functions common across datasets
 """
 
 import zipfile
-from pathlib import Path
 
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
 from wmlci.settings import extractpath, paths, source_data_path
-from wmlci.extract.download_source_data_from_api import (
-    download_source_data,
-    source_data_dir,
-)
+from wmlci.extract.extract_common import extract_source_data, jsonld_source_dir
 from wmlci.log import log
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
 
 from esupy.remote import make_url_request
 from esupy.processed_data_mgmt import mkdir_if_missing
-
-
-def _jsonld_source_dir(fname: str, version: str | None = None) -> Path:
-    """Local directory containing JSON-LD for ``fname``."""
-    if (extractpath / f"{fname}.yaml").exists():
-        return source_data_dir(fname, version) / fname
-    return source_data_path / fname
 
 
 def download_source_data_from_remote(fname):
@@ -59,14 +48,14 @@ def load_JSONLD_sourceData(
     fname, datatype="jsonld", bw_database_name="db", data_version=None
 ):
     """
-    Load sourceData file. If missing locally, download from an extract API yaml
-    when ``wmlci/extract/{fname}.yaml`` exists, otherwise from EPA Data Commons.
+    Load local JSON-LD source data. If missing locally, obtain it from the extract
+    yaml or EPA Data Commons.
     """
-    filepath = _jsonld_source_dir(fname, version=data_version)
+    filepath = jsonld_source_dir(fname, version=data_version)
 
     if not filepath.exists():
         if (extractpath / f"{fname}.yaml").exists():
-            download_source_data(fname, version=data_version)
+            extract_source_data(fname, version=data_version)
         else:
             download_source_data_from_remote(f"{fname}.zip")
             with zipfile.ZipFile(source_data_path / f"{fname}.zip", 'r') as zip_ref:
@@ -97,6 +86,8 @@ def clean_JSONLD_sourceData(jsonld, config):
     jsonld = map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM")
     # Recompute amounts from amountFormula
     jsonld = recalculate_amounts_from_formulas(jsonld, config)
+    # Carbon storage: flip positive c_storage to emission-to-air CO2 credit
+    jsonld = apply_carbon_storage_credit(jsonld)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US
