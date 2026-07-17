@@ -1,0 +1,48 @@
+# Updated Waste Reduction Model v16 excel tool data inputs.
+# Changes include:
+#   - Most recent IPCC data for GWP
+#   - Non-truncated transportation data (TODO: implement)
+#   - Improved electricity (TODO: implement)
+#
+# Models 3 material-pathway combinations:
+#   a) incineration + plastic
+#   b) recycling + plastic
+#   c) organics + landfill
+
+method_name: wmlci_pilot
+bw_project_name: wmlci_pilot
+
+inventory_source: waste_reduction_model_v16_pilot
+inventory_database: openlca_db
+
+lcia_input: ipcc_gwp
+lcia_input_version: 1.2024-12.0
+lcia_db_name: IPCC
+
+lcia_method:
+  - IPCC
+  - AR6-100
+
+model_defaults:
+  functional_unit:
+    amount: 907.18474  # one US short ton
+    unit: kilogram
+
+# global_parameter_overrides:
+#   transport_distance_landfilling: XX
+
+# process_parameter_overrides:
+#   "MSW recycling of PET":
+#     recovered_material: XX
+
+processes:
+  "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions": null
+#    technosphere_updates: msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg
+  "MSW combustion of Mixed Plastics": null
+#    technosphere_updates: msw_combustion_mixed_plastics
+  "MSW recycling of Mixed Plastics": null
+#    technosphere_updates: msw_recycling_mixed_plastics
+
+output_files:
+  summary_csv: wmlci_pilot_lcia_results.csv
+  detail_csv: wmlci_pilot_lcia_results_detailed.csv

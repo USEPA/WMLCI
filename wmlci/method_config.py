@@ -30,23 +30,34 @@ def load_method_config(method_name: str) -> dict[str, Any]:
         config["method_name"] = method_name
 
     defaults = deepcopy(config.get("model_defaults") or {})
-    systems = config.get("systems")
-    if not systems:
+    processes = config.get("processes")
+    if not processes:
         raise ValueError(
-            f"Method '{method_name}' must define systems (every process to model)"
+            f"Method '{method_name}' must define processes, "
+            "include all processes to model."
         )
 
-    config["systems"] = {
-        name: _apply_system_specific_settings(defaults, overrides)
-        for name, overrides in systems.items()
+    config["processes"] = {
+        name: _apply_process_specific_settings(defaults, overrides)
+        for name, overrides in processes.items()
+    }
+
+    # Parameter overrides for amountFormula re-evaluation
+    # optional in method YAML — append empty dict if does not exist
+    config["global_parameter_overrides"] = dict(
+        config.get("global_parameter_overrides") or {}
+    )
+    config["process_parameter_overrides"] = {
+        str(k): dict(v or {})
+        for k, v in (config.get("process_parameter_overrides") or {}).items()
     }
     return config
 
 
-def _apply_system_specific_settings(
+def _apply_process_specific_settings(
     defaults: dict[str, Any], overrides: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """Merge per-system overrides into model_defaults (flowsa-style)."""
+    """Merge per-process overrides into model_defaults (flowsa-style)."""
     merged = deepcopy(defaults)
     if not overrides:
         return merged

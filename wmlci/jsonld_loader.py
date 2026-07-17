@@ -7,20 +7,20 @@ import zipfile
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
-from wmlci.settings import epa_data_commons_path, paths
+from wmlci.settings import extractpath, paths, source_data_path
+from wmlci.extract.extract_common import extract_source_data, jsonld_source_dir
 from wmlci.log import log
 from wmlci.editImporter import *
 from wmlci.errorLogging import *
 
 from esupy.remote import make_url_request
-from esupy.util import make_uuid
-from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
+from esupy.processed_data_mgmt import mkdir_if_missing
 
 
 def download_source_data_from_remote(fname):
     """
     Download source data stored from USEPA's data commons to local directory
-    (``wmlci/data/source_data/epa_data_commons/``)
+    (``wmlci/data/source_data/``)
     :param fname: str, filename, must include extension (such as .zip)
     :return:
     """
@@ -32,7 +32,7 @@ def download_source_data_from_remote(fname):
     if r is not None:
         status = True
         # set subdirectory
-        folder = epa_data_commons_path
+        folder = source_data_path
         mkdir_if_missing(folder)
         file = folder / fname
         with file.open('wb') as fi:
@@ -44,23 +44,23 @@ def download_source_data_from_remote(fname):
     return status
 
 
-def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
+def load_JSONLD_sourceData(
+    fname, datatype="jsonld", bw_database_name="db", data_version=None
+):
     """
-    Load sourceData file. Checks for file in local directory, if does not exist, pulls file from USEPA's Data Commons
-    :param fname: str, filename for source data
-    :param datatype: str, 'jsonld' or 'jsonld_lcia'
-    :param bw_database_name: str, set database name, default name set to 'db'
-    :return:
+    Load local JSON-LD source data. If missing locally, obtain it from the extract
+    yaml or EPA Data Commons.
     """
-    # define path to source data
-    filepath = epa_data_commons_path / fname
+    filepath = jsonld_source_dir(fname, version=data_version)
 
-    # load jsonld source data from local directory. If data not found locally, download first, then load
     if not filepath.exists():
-        download_source_data_from_remote(f"{fname}.zip")
-        with zipfile.ZipFile(epa_data_commons_path / f"{fname}.zip", 'r') as zip_ref:
-            zip_ref.extractall(filepath)
-        log.info(f"Unzipped {fname} to {epa_data_commons_path}")
+        if (extractpath / f"{fname}.yaml").exists():
+            extract_source_data(fname, version=data_version)
+        else:
+            download_source_data_from_remote(f"{fname}.zip")
+            with zipfile.ZipFile(source_data_path / f"{fname}.zip", 'r') as zip_ref:
+                zip_ref.extractall(filepath)
+            log.info(f"Unzipped {fname} to {source_data_path}")
 
     if datatype == 'jsonld':
         log.info(f"Loading {filepath}")
@@ -74,17 +74,20 @@ def load_JSONLD_sourceData(fname, datatype= 'jsonld', bw_database_name='db'):
     return jsonld
 
 
-def clean_JSONLD_sourceData(jsonld):
+def clean_JSONLD_sourceData(jsonld, config):
     """
     Apply standard cleaning functions after loading JSONLD data that address common issues in imported data.
     This function should be run before bw apply_strategies().
-    :param fname:
-    :param datatype:
-    :param bw_database_name:
-    :return:
+
+    ``config`` can include global/process parameter overrides for amountFormula
+    re-calc so exchange amounts are not static openLCA export values.
     """
     # map UUIDs to the federal elementary flowlist UUIDs
     jsonld = map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM")
+    # Recompute amounts from amountFormula
+    jsonld = recalculate_amounts_from_formulas(jsonld, config)
+    # Carbon storage: flip positive c_storage to emission-to-air CO2 credit
+    jsonld = apply_carbon_storage_credit(jsonld)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US

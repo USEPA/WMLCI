@@ -1,0 +1,24 @@
+# USLCI Database Public
+
+author: Federal LCA Commons
+source_name: USLCI Database Public
+version: 1.2026-06.0
+source_url: https://www.lcacommons.gov/lca-collaboration/National_Renewable_Energy_Laboratory/USLCI_Database_Public/datasets
+api_name: FLCAC
+api_key_required: true
+format: json-ld
+
+url:
+  base_url: https://api.nal.usda.gov/FederalLCACommonsapi
+
+download_steps:
+  - url:
+      api_path: /download/json/prepare/National_Renewable_Energy_Laboratory/USLCI_Database_Public
+      url_params:
+        api_key: __apiKey__
+    response_as: token
+  - url:
+      api_path: /download/json/__token__
+      url_params:
+        api_key: __apiKey__
+    unzip: true

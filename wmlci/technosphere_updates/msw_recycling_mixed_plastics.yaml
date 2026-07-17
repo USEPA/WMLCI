@@ -1,0 +1,12 @@
+technosphere_exchanges:
+  "Transport of MSW, by truck":
+    data_source: uslci
+    data_version: 1.2026-06.0
+    product: "Transport; single unit truck, short-haul; diesel powered"
+    process: "Transport, single unit truck; short-haul; diesel powered"
+
+# technosphere_exchange_drops:
+#   - "Transport, in product manufacturing from PET, using 100% recycled inputs"
+#   - "Transport, in product manufacturing from HDPE, using 100% recycled inputs"
+#   - "Transport, in product manufacturing from PET, using 100% virgin inputs"
+#   - "Transport, in product manufacturing from HDPE, using 100% virgin inputs"

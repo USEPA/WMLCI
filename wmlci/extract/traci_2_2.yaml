@@ -1,0 +1,24 @@
+# TRACI 2.2
+
+author: Federal LCA Commons
+source_name: TRACI 2.2
+version: 1.2025-04.0
+source_url: https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/TRACI_2_2/dataset/IMPACT_METHOD/52ce6d64-4e91-347e-8c0b-4b616b2c0339
+api_name: FLCAC
+api_key_required: true
+format: json-ld
+
+url:
+  base_url: https://api.nal.usda.gov/FederalLCACommonsapi
+
+download_steps:
+  - url:
+      api_path: /download/json/prepare/Federal_LCA_Commons/TRACI_2_2
+      url_params:
+        api_key: __apiKey__
+    response_as: token
+  - url:
+      api_path: /download/json/__token__
+      url_params:
+        api_key: __apiKey__
+    unzip: true

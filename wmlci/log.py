@@ -64,7 +64,7 @@ def reset_log_file(filename, _meta):
     Rename the log file saved to local directory using df meta and
         reset the log
     :param filename: str, name of dataset
-    :param fb_meta: metadata for parquet
+    :param _meta: WMLCI metadata object
     """
     # original log file name - all log statements
     log_file = logoutputpath / "wmlci.log"
