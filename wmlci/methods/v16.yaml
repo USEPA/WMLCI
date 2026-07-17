@@ -25,7 +25,7 @@ model_defaults:
     unit: kilogram
 
 global_parameter_overrides:
-  GWP_CH4: 25.0  # used in Excel tool v16
+  GWP_CH4: 25.0  # used in Excel tool v16 for fugitive_CH4
   transport_distance_landfilling: 20
   transport_distance_combustion: 20
   transport_distance_recycling: 20
