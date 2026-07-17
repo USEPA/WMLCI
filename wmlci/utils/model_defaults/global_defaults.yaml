@@ -7,7 +7,7 @@ parameters:
   C_content_distillate: 20.17
   C_content_residual_oil: 20.48
   C_initial_content_food_waste: 0.521833597827365
-  C_storage_food_waste: 0.125833597827365
+  C_storage_food_waste: 0.122990  # different than openlca output, using the Barlaz adjusted value from v16 excel tool
   C_to_CO2: 3.66666666666667
   CH4_calorific_value: 1012.0
   CH4_emitted_no_LFG_recovery: 0.9
