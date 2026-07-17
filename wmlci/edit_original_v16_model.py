@@ -343,8 +343,6 @@ def make_pilot(
 
 
 if __name__ == "__main__":
-    from wmlci.extract.extract_source_data_from_script import (
-        extract_source_data_from_script,
-    )
+    from wmlci.extract.extract_common import extract_source_data
 
-    extract_source_data_from_script("waste_reduction_model_v16_pilot")
+    extract_source_data("waste_reduction_model_v16_pilot")
