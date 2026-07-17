@@ -19,6 +19,72 @@ from wmlci.settings import model_defaults_path
 _NO_TARGET = {"n.a.", "nan", "none", ""}
 
 
+##############################################################
+### Ensure carbon storage exchanges are credits (negative) ###
+##############################################################
+
+def apply_carbon_storage_credit(jsonld):
+    """
+    Flip positive carbon storage exchanges to emission-to-air CO2 credits in kg.
+
+    In the v16 Excel tool, we get a credit for carbon storage from landfilling (so negative carbon).
+    If we do not apply this function, this Python model, does not provide that negative credit
+    because of how the fedefl mapping works. Carbon storage is classified as "resource/air" while
+    other carbon sources are classified as "emissions/air", so carbon storage is never
+    subtracted out.
+
+    This function reclassifies carbon storage as emissions/air so it is subtracted out.
+
+    """
+    co2 = next(
+        (
+            f
+            for f in jsonld.data.get("flows", {}).values()
+            if f.get("name") == "Carbon dioxide"
+            and f.get("flowType") == "ELEMENTARY_FLOW"
+            and "emission" in (f.get("category") or "").lower()
+        ),
+        None,
+    )
+    kg = next(
+        (
+            {"@type": "Unit", "@id": u["@id"], "name": "kg"}
+            for g in jsonld.data.get("unit_groups", {}).values()
+            for u in g.get("units") or []
+            if u.get("name") == "kg"
+        ),
+        None,
+    )
+
+    n = 0
+    for p in jsonld.data.get("processes", {}).values():
+        for ex in p.get("exchanges", []):
+            formula = ex.get("amountFormula") or ""
+            amount = float(ex.get("amount") or 0)
+            if "c_storage" not in formula.lower() or amount <= 0:
+                continue
+            if kg and (ex.get("unit") or {}).get("name") in {"t", "tonne", "Mg"}:
+                amount *= 1000
+                formula = f"({formula}) * 1000"
+                ex["unit"] = kg
+            ex["amount"] = -amount
+            ex["amountFormula"] = f"-1*({formula})"
+            if co2:
+                ex["flow"] = {
+                    "@type": "Flow",
+                    "@id": co2["@id"],
+                    "name": co2["name"],
+                    "category": co2.get("category"),
+                    "flowType": "ELEMENTARY_FLOW",
+                    "refUnit": "kg",
+                }
+            n += 1
+
+    if n:
+        log.info(f"Applied carbon storage credit to {n} exchange(s).")
+    return jsonld
+
+
 ######################################################
 ### Remove exchanges and processes with no impacts ###
 ######################################################

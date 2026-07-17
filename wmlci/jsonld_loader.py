@@ -86,6 +86,8 @@ def clean_JSONLD_sourceData(jsonld, config):
     jsonld = map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM")
     # Recompute amounts from amountFormula
     jsonld = recalculate_amounts_from_formulas(jsonld, config)
+    # Carbon storage: flip positive c_storage to emission-to-air CO2 credit
+    jsonld = apply_carbon_storage_credit(jsonld)
     # Apply the Opposite Direction Approach for waste management
     jsonld = apply_opposite_direction_approach(jsonld)
     # Replace location dictionary with a single entry for the US
