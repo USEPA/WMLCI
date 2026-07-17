@@ -3,7 +3,6 @@ Functions to clean up imported olca data and generate square technosphere matrix
 """
 
 import re
-from io import StringIO
 from typing import Any, Set
 
 import fedelemflowlist
@@ -15,8 +14,6 @@ from bw2io.importers.json_ld import JSONLDImporter
 from wmlci.errorLogging import validate_jsonld_exchanges
 from wmlci.log import log
 from wmlci.settings import model_defaults_path
-
-from esupy.remote import make_url_request
 
 # values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
 _NO_TARGET = {"n.a.", "nan", "none", ""}
@@ -588,64 +585,6 @@ def recalculate_amounts_from_formulas(jsonld, config: dict[str, Any]):
 ### Flowmapping                                            ###
 ##############################################################
 
-def load_updated_warm_flowmapping(mapping):
-    """
-    Override fedelemflowlist WARM mappings with the To FEDEFL section from
-    uslci-content (https://github.com/FLCAC-admin/uslci-content).
-    """
-    url = (
-        "https://raw.githubusercontent.com/FLCAC-admin/uslci-content/dev/"
-        "docs/supporting_docs/WARM/WARM%20flow%20mappings.csv"
-    )
-    r = make_url_request(url)
-    if r is None:
-        log.warning(
-            f"Could not access updated FEDEFL mappings from {url}; "
-            "using fedelemflowlist mapping file only."
-        )
-        return mapping
-
-    text = r.content.decode("utf-8")
-    start = text.find("To FEDEFL")
-    if start < 0:
-        return mapping
-    rest = text[text.find("\n", start) + 1 :]
-    end = rest.find("\nTo ")
-    fedefl = rest[:end] if end >= 0 else rest
-
-    overrides = pd.read_csv(
-        StringIO(fedefl),
-        sep=";",
-        header=None,
-        usecols=[0, 1, 2, 6, 7, 14, 16],
-        names=[
-            "SourceFlowUUID",
-            "TargetFlowUUID",
-            "ConversionFactor",
-            "TargetFlowName",
-            "TargetFlowContext",
-            "SourceUnit",
-            "TargetUnit",
-        ],
-    ).dropna(subset=["SourceFlowUUID", "TargetFlowUUID"])
-    if overrides.empty:
-        return mapping
-
-    overrides["TargetFlowContext"] = (
-        overrides["TargetFlowContext"]
-        .astype(str)
-        .str.removeprefix("Elementary flows/")
-    )
-    mapping = mapping.set_index("SourceFlowUUID")
-    mapping.update(overrides.set_index("SourceFlowUUID"))
-    mapping = mapping.reset_index()
-    log.info(
-        f"Applied {len(overrides)} WARM FEDEFL override mappings "
-        f"from uslci-content."
-    )
-    return mapping
-
-
 def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
     """
     Harmonize inventory elementary flows to the EPA Federal Elementary Flow
@@ -678,9 +617,6 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
         ~mapping["TargetFlowUUID"].astype(str).str.strip().str.lower().isin(_NO_TARGET)
     ]
     mapping = mapping.drop_duplicates(subset=["SourceFlowUUID"], keep="first")
-
-    if sourcelistname == "WARM":
-        mapping = load_updated_warm_flowmapping(mapping)
 
     mapping_dict = (
         mapping.set_index("SourceFlowUUID")[
