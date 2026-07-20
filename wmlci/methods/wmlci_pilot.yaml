@@ -9,10 +9,10 @@
 #   b) recycling + plastic
 #   c) organics + landfill
 
-method_name: wmlci_demo
-bw_project_name: wmlci_demo
+method_name: wmlci_pilot
+bw_project_name: wmlci_pilot
 
-inventory_source: warm613_v16_pilot_square_2025_12_11
+inventory_source: waste_reduction_model_v16_pilot
 inventory_database: openlca_db
 
 lcia_input: ipcc_gwp
@@ -44,5 +44,5 @@ processes:
     technosphere_updates: msw_recycling_mixed_plastics
 
 output_files:
-  summary_csv: wmlci_demo_lcia_results.csv
-  detail_csv: wmlci_demo_lcia_results_detailed.csv
+  summary_csv: wmlci_pilot_lcia_results.csv
+  detail_csv: wmlci_pilot_lcia_results_detailed.csv

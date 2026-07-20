@@ -7,7 +7,7 @@ parameters:
   C_content_distillate: 20.17
   C_content_residual_oil: 20.48
   C_initial_content_food_waste: 0.521833597827365
-  C_storage_food_waste: 0.125833597827365
+  C_storage_food_waste: 0.122990  # different than openlca output, using the Barlaz adjusted value from v16 excel tool
   C_to_CO2: 3.66666666666667
   CH4_calorific_value: 1012.0
   CH4_emitted_no_LFG_recovery: 0.9
@@ -23,7 +23,7 @@ parameters:
   fugitive_CH4_distillate: 1.7117279037324228e-05
   fugitive_CH4_residual_oil: 1.7117279037324228e-05
   Gallons_to_Liters: 3.78541178
-  GWP_CH4: 29.8  # TODO: check want to use AR6 fossil
+  GWP_CH4: 29.8  # used for fugitive_CH4, value for AR6-100
   hdpe_in_mixed_plastics: 0.397435897435897
   kWh_per_BTU_CH4: 8.547008547008547e-05
   MMBTU_to_kWh: 293.083235638921

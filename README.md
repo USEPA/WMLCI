@@ -1,22 +1,24 @@
-# Waste Management Life Cycle Inventory  Model Assembler and Calculator (WMLCI)
+# Waste Management Life Cycle Inventory Model Assembler and Calculator (WMLCI)
 
-WMLCI is being developed to update the EPA's approach to generating the Waste Reduction Model Excel tool. This updated approach is intended to provide users with a transparent model that is reproduceable, editable, and quickly updatable as new data sources are released. 
+WMLCI is being developed to update the US Environmental Protection Agency's (USEPA) approach to generating the Waste Reduction Model Excel tool. This revised approach is intended to provide users with a transparent model that is reproducible, editable, and quickly updatable as new data sources are released.
 
-The model runs life cycle assessments (LCAs) using the [Brightway](https://docs.brightway.dev/) ecosystem. The base process data are output from the Waste Reduction Model openLCA JSON-LD inventories and published impact methods (e.g., IPCC GWP from [Federal LCA Commons](https://www.lcacommons.gov/)). The original process data, which are the data behind the v16 Excel tool, are updated with data from Federal LCA Commons. 
+WMLCI prepares life cycle inventory (LCI) data and uses the [Brightway](https://docs.brightway.dev/) LCA framework to import that inventory, apply LCIA methods (e.g., IPCC GWP from [Federal LCA Commons](https://www.lcacommons.gov/)), and calculate life cycle assessment (LCA) results for selected materials and waste management pathways.  
+The analysis is not limited to greenhouse gases, WMLCI is designed to assesses other environmental impacts.
 
-At this time, the model is designed to reproduce and update the approach to 3 processes in the Waste Reduction Model:
-   1. MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions 
+At this time, the WMLCI package reproduces and updates the approach to 3 processes in the Waste Reduction Model:
+   1. MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions
    2. MSW combustion of Mixed Plastics
    3. MSW recycling of Mixed Plastics
 
+Results are scenario-level LCIA scores (e.g. GWP as kg CO₂e) output as CSVs that break each score down by contributing activity.
 
-## Run a life cycle assessment (LCA) model
+## Run an LCI + LCIA calculation
 
-Methods are defined in YAML files in `wmlci/methods/`.
+Model methods are defined in YAML files in `wmlci/methods/`.
 
 Available methods:
-   1. `v16`: replicates the v16 Excel tool for 3 processes
-   2. `wmlci_demo`: updated approach to the 3 processes
+   1. `v16`: replicates the v16 Excel tool for the 3 material-pathways
+   2. `wmlci_pilot`: base v16 Excel tool model with updated LCI (FLCAC technosphere data) and LCIA (newer IPCC GWP) for the 3 material-pathways
 
 To run in Python:
 

@@ -1,0 +1,30 @@
+# Waste Reduction Model v16 pilot JSON-LD
+
+author: WMLCI
+source_name: Waste Reduction Model v16 pilot
+source_url: EPA Data Commons WMLCI/sourceData/waste_reduction_model_v16.zip
+format: json-ld
+
+# Original EPA Waste Reduction Model v16 JSON-LD source, downloaded from EPA Data Commons.
+base_source: waste_reduction_model_v16
+
+# Generate this derived source-data product from the base source.
+script_function: !script_function:edit_original_v16_model make_pilot
+
+# Pilot-specific edit configuration for `edit_original_v16_model.make_pilot`.
+# Keeping the IDs/config in YAML makes the Python function reusable.
+processes_keep:
+  - e847ff05-48e3-4df0-ae4d-db2bafe56baf # mixed plastics combustion
+  - b7eb29f9-d173-4ec5-9710-5f451b6bbfce # food waste landfilling
+  - 1b246a12-d894-4381-ab43-f93c86c59b6f # mixed plastics recycling
+
+processes_remove:
+  - bfabc9c0-f0e1-432b-ba2e-600d3119f2d1 # wood chipping process
+
+flows_remove:
+  - f45fbcf0-24f0-4ce1-b1d9-78f2ed0d5a34 # jobs flow
+  - c9f2c667-eeab-448e-9c0c-6da04000fda6 # taxes flow
+  - 8c2daef6-fd94-410b-a258-7df1f02c1bce # wages flow
+  - 24ecda7d-7c05-45f6-94d2-005924940d26 # wood chipping flow
+  - e3b06ae8-cedf-4bb7-a864-ff8c4c0950e9 # steel, recycled flow
+  - bad888b4-4615-4904-953f-c67d2ca5f41f # other means of transport flow

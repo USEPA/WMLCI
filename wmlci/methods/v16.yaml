@@ -8,7 +8,7 @@
 method_name: waste_reduction_model_v16
 bw_project_name: waste_reduction_model_v16_replication
 
-inventory_source: warm613_v16_pilot_square_2025_12_11
+inventory_source: waste_reduction_model_v16_pilot
 inventory_database: openlca_db
 
 lcia_input: ipcc_gwp
@@ -25,7 +25,7 @@ model_defaults:
     unit: kilogram
 
 global_parameter_overrides:
-  GWP_CH4: 25.0  # original amount output out of openlca data
+  GWP_CH4: 25.0  # used in Excel tool v16 for fugitive_CH4
   transport_distance_landfilling: 20
   transport_distance_combustion: 20
   transport_distance_recycling: 20
