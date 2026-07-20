@@ -31,15 +31,28 @@ OUTPUT_PATH = PATH_PROJECT / "data/source_data/swolfpy"
 import pandas as pd
 from swolfpy_processmodels import WTE
 
+
+
 # --------------------------------------------------
 # Create and run model
 # --------------------------------------------------
 
+
 wte = WTE()
 
+print(dir(wte))
 print("Running WTE...")
+
+print(type(wte.InputData))
+
+print(wte.InputData.__dict__.keys())
+
+wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = 32.1869
 wte.calc()
 print("Complete")
+
+# %%
+
 
 # --------------------------------------------------
 # Check available material names
@@ -323,8 +336,8 @@ def add_exchange(
 
 add_exchange(
     flow_name="Mixed Plastic",
-    amount=1000,
-    unit="kg",
+    amount=1,
+    unit="sh tn",
     flow_type="PRODUCT_FLOW",
     is_input=True,
     provider_name='',
@@ -563,7 +576,7 @@ for col in schema:
 
 df_olca = df_olca[schema]
 
-# %% addtional unit conversion 
+# %% addtional unit conversion to kg/Mg basis
 
 exceptions = ['Ammonia','Charcoal','lime','Transport','Electricity','Plastic']
 pattern = '|'.join(exceptions)
@@ -571,6 +584,12 @@ pattern = '|'.join(exceptions)
 mask = df_olca['FlowName'].str.contains(pattern, case=False, regex=True)
 
 df_olca.loc[~mask, 'amount'] = df_olca.loc[~mask, 'amount'] * 1000
+
+
+# %% convert all exchanges up to sh ton basis 
+
+ref_mask = df_olca['reference']
+df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * 1.10231
 
 # %%
 
