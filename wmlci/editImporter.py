@@ -200,14 +200,6 @@ def remove_impact_free_objects(importer) -> None:
 ### Opposite direction approach ###
 ###################################
 
-def _negate_amount(exchange: dict) -> None:
-    """Negate amount for the opposite-direction waste approach"""
-    if exchange.get("amount") is not None:
-        exchange["amount"] *= -1
-    if exchange.get("amountFormula"):
-        exchange["amountFormula"] = f"-({exchange.get("amountFormula")})"
-
-
 def apply_opposite_direction_approach(jsonld):
     '''
     https://greendelta.github.io/openLCA2-manual/waste_modelling.html#opposite-direction-approach
@@ -232,14 +224,24 @@ def apply_opposite_direction_approach(jsonld):
             if "CUTOFF Waste Flows" in flow_category:
                 continue
             else:
-                was_input = exchange.get("isInput")
                 # Edit waste outputs from processes that are inputs to waste treatment
-                if was_input == False:
-                    _negate_amount(exchange)  # make value negative
+                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == False:
+                    if exchange.get("amountFormula"):
+                        exchange["amountFormula"] = (
+                            f"-({exchange.get('amountFormula')})"
+                        )
+                    exchange["amount"] *= -1  # make value negative
                     exchange["isInput"] = True # make input
+                    # Brightway json_ld_label_exchange_type requires isInput
+                    # exchanges to be PRODUCT_FLOW.
+                    flow["flowType"] = "PRODUCT_FLOW"
                 # Edit waste input to waste treatment
-                elif was_input == True:
-                    _negate_amount(exchange)  # make value negative
+                elif flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == True:
+                    if exchange.get("amountFormula"):
+                        exchange["amountFormula"] = (
+                            f"-({exchange.get('amountFormula')})"
+                        )
+                    exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
                     exchange["isInput"] = False  # make output
                     flow["flowType"] = "PRODUCT_FLOW"  # make product flow
