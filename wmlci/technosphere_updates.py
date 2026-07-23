@@ -21,7 +21,7 @@ from wmlci.log import log
 
 updates_dir = Path(__file__).resolve().parent / "technosphere_updates"
 
-# Cleared at the start of each replace_input_providers call.
+# Cleared at the start of each update_technosphere_flows call.
 # Cleaned source JSON-LD (after keeping only needed processes; before formula recalc).
 _CLEANED_SOURCE_CACHE = {}
 # Processes keyed by name, after formula amounts are recalculated.
@@ -204,7 +204,11 @@ def load_processes_by_name(
         _load_and_clean_source_jsonld(data_source, data_version, root_names=root_names)
     )
     # Source amountFormulas may reference the same global defaults / overrides.
-    source = recalculate_amounts_from_formulas(source, config or {})
+    source = recalculate_amounts_from_formulas(
+        source,
+        config or {},
+        dataset_name=f"{data_source}@{data_version}",
+    )
 
     processes = source.data.get("processes", {})
     # Only pin replacements need name lookup; upstream is reached by @id.
@@ -560,12 +564,24 @@ def replace_input_provider(
         production = replacement["production"]
         flow = deepcopy(production.get("flow", {}))
         exchange["flow"] = flow
-        # Keep existing demand amount; only swap provider and product flow.
+        # Keep existing demand, rescale into the new supplier's unit.
         # category + flowType are required non-empty strings for the provider
         # metadata validator; source them from the provider process and flow.
         provider_process = (
             index["source"].data.get("processes", {}).get(replacement["process_id"], {})
         )
+        new_unit = production["unit"]
+        factors = {}
+        for data in (importer.data, index["source"].data):
+            for ug in (data.get("unit_groups") or {}).values():
+                for unit in ug.get("units") or []:
+                    if unit.get("@id") is not None and unit.get("conversionFactor") is not None:
+                        factors[unit["@id"]] = float(unit["conversionFactor"])
+        scale = factors[old_unit["@id"]] / factors[new_unit["@id"]]
+        exchange["amount"] = float(old_amount) * scale
+        exchange["unit"] = deepcopy(new_unit)
+        if exchange.get("amountFormula") and scale != 1.0:
+            exchange["amountFormula"] = f"({exchange['amountFormula']}) * {scale}"
         exchange["defaultProvider"] = {
             "@id": replacement["process_id"],
             "@type": "Process",
@@ -583,8 +599,9 @@ def replace_input_provider(
             f"(under '{foreground_process_name}'): "
             f"{provider_name} -> {replacement['process_name']} / "
             f"{flow.get('name')} "
-            f"({old_amount} {old_unit} -> {replacement['amount']} "
-            f"{replacement['unit']}) [{data_source}@{data_version}]"
+            f"({old_amount} {old_unit.get('name')} -> "
+            f"{exchange['amount']} {new_unit.get('name')})"
+            f" [{data_source}@{data_version}]"
         )
 
     if replaced == 0:
