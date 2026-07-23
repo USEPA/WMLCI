@@ -12,7 +12,7 @@ from flcac_utils.generate_processes import build_location_dict
 from flcac_utils.util import extract_actors_from_process_meta, \
     extract_sources_from_process_meta, extract_dqsystems
 from flcac_utils.generate_processes import build_flow_dict, \
-        build_process_dict, write_objects, validate_exchange_data
+        build_process_dict, validate_exchange_data
 from flcac_utils.util import assign_year_to_meta
 from flcac_utils.commons_api import get_single_object
 import copy
@@ -699,6 +699,83 @@ for process_name in id_to_name.keys():
         dq_objs={}, df_params={}
     )
     processes.update(p_dict)
+# %%
+import olca_schema as olca
+import olca_schema.zipio as zipio #for writing to json
+from datetime import datetime, time
+
+outPath = Path(__file__).parents[1] / 'output'
+
+def _write_obj(
+        file: str,
+        obj: dict,
+        path: Path = outPath
+        ):
+    """Creates a zip json from dictionary of olca obj e.g. file = 'json.zip'"""
+    with zipio.ZipWriter(path / file) as W:
+        for x in obj.values():
+            if x.last_change is None:
+                x.last_change = (datetime.combine(
+                    datetime.utcnow().date(), time(12)).isoformat() + 'Z')
+            if x.version is None:
+                x.version = '00.00.001'
+            W.write(x)
+
+# %%
+
+
+def write_objects(name: str,
+                  flows: dict[str, olca.Flow],
+                  new_flows_to_write: list,
+                  processes: dict[str, olca.Process],
+                  *args,
+                  out_path=outPath
+                  ):
+    """
+    Writes a collection of objects to json-ld to the out_path
+
+    :param name: str, stub for json-ld filename
+    :param flows: dict[UUID, olca.Flow]
+    :param new_flows_to_write: list of UUIDs found within flows
+    :param processes: dict[UUID, olc.Process]
+    :args:
+        additional dictionaries of olca objects where values are objects
+        for writing to json-ld e.g., Sources, Actors, etc.
+    """
+    ## Attempt to retrieve FEDEFL so that UUIDs of exchange flows can be assessed for
+    ## whether they exist in the FEDEFL.
+    try:
+        import fedelemflowlist
+        fl = fedelemflowlist.get_flows()
+    except (ImportError, AttributeError):
+        print("FEDEFL not available, UUIDs will not be checked")
+        fl = None
+
+    # generate flow lists to write
+    flowlist = fl.query('`Flow UUID` in @flows.keys()')
+    t_flowlist = {k: v for k, v in flows.items() if k in new_flows_to_write}
+    
+    # Write JSON -- IMPORT into database with **Units and Flow Properties**
+    # Select "Update data sets with newer versions" to replace any created flows
+    # and processes, but not any exisiting technosphere flows
+    
+    timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
+    #json_file = f'{name}_olca2.0_{timestr}.zip'
+    json_file = f'{name}.zip'
+    # Remove existing json (otherwise it gets extended)
+    (out_path / json_file).unlink(missing_ok=True)
+    # Create output folder if it doesn't exist
+    out_path.mkdir(parents=False, exist_ok=True)
+    print(f"Writing json to {out_path/json_file}")
+    # write flows directly from flow list based on those found in processes
+    fedelemflowlist.write_jsonld(flowlist, path=out_path / json_file)
+    # write tech flows
+    _write_obj(file=json_file, obj=t_flowlist, path=out_path)
+    # write processes
+    _write_obj(file=json_file, obj=processes, path=out_path)
+    # write additional objects as needed
+    for a in args:
+        _write_obj(file=json_file, obj=a, path=out_path)
 
 # %% write everything
 
