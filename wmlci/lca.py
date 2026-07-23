@@ -11,6 +11,7 @@ import bw2data as bd
 from wmlci.disaggregation import split_multi_product_processes
 from wmlci.editImporter import (
     convert_lcia_param_list_to_dict,
+    correct_jsonld_input_key,
     map_lcia_to_fedelemflowlist_UUIDs,
 )
 from wmlci.errorLogging import check_for_errors_in_jsonld_import
@@ -23,6 +24,7 @@ from wmlci.openlca import (
     resolve_processes,
     write_lca_outputs,
 )
+from wmlci.technosphere_updates import update_technosphere_flows
 
 
 def run_bw_lca(method_name: str) -> dict[str, Any]:
@@ -60,6 +62,8 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     check_for_errors_in_jsonld_import(jsonld)
     # apply common clean up procedures
     jsonld = clean_JSONLD_sourceData(jsonld, config)
+    # replace input providers using technosphere_updates YAML
+    jsonld = update_technosphere_flows(jsonld, config["processes"], config)
     # check for errors again
     log.info("Checking errors are fixed")
     check_for_errors_in_jsonld_import(jsonld)
