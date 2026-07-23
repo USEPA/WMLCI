@@ -67,6 +67,9 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     # check for errors again
     log.info("Checking errors are fixed")
     check_for_errors_in_jsonld_import(jsonld)
+    # keep duplicative input/isInput keys because
+    # json_ld_allocate_datasets uses input, while json_ld_add_activity_unit uses isInput
+    jsonld = correct_jsonld_input_key(jsonld)
     # fix issues when openLCA and brightway have to talk by manipulating data sets
     jsonld.apply_strategies()
     # merge biosphere flows
