@@ -25,13 +25,17 @@ PATH_PROJECT = Path(__file__).resolve().parent
 
 PATH_PROJECT = Path(__file__).parent.parent
 OUTPUT_PATH = PATH_PROJECT / "data/source_data/swolfpy"
+METHODS_PATH = PATH_PROJECT / "methods"
+
+with open(METHODS_PATH / "v16.yaml" , "r") as f:
+    config = yaml.safe_load(f)
 # %%
 
 
 import pandas as pd
 from swolfpy_processmodels import WTE
 
-
+print(config['model_defaults']['functional_unit']['amount'])
 
 # --------------------------------------------------
 # Create and run model
@@ -42,12 +46,11 @@ wte = WTE()
 
 print(dir(wte))
 print("Running WTE...")
-
 print(type(wte.InputData))
-
 print(wte.InputData.__dict__.keys())
 
-wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = 32.1869
+#change transport distance, with mi to km conversion
+wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = config['model_defaults']['transport']['distance_miles'] * 1.60934
 wte.calc()
 print("Complete")
 
@@ -589,7 +592,8 @@ df_olca.loc[~mask, 'amount'] = df_olca.loc[~mask, 'amount'] * 1000
 # %% convert all exchanges up to sh ton basis 
 
 ref_mask = df_olca['reference']
-df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * 1.10231
+#df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * 1.10231
+df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1000 / config['model_defaults']['functional_unit']['amount'])
 
 # %%
 
@@ -709,3 +713,4 @@ write_objects(
     actor_objs,
     out_path=OUTPUT_PATH,
 )
+
