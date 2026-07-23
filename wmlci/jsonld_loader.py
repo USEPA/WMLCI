@@ -120,7 +120,7 @@ def clean_JSONLD_background_data(jsonld):
     one production exchange. Then clone product
     UUIDs that are shared across multiple processes so the matrix stays
     square. Elementary flows stay on the process and are attributed to the
-    remaining reference product. Do not use TECHNOSPHERE_FLOW relabel.
+    remaining reference product.
 
     Keeps openLCA ``isInput`` through cleaning. Immediately before
     ``apply_strategies()``, ``correct_jsonld_input_key`` syncs both ``isInput``
