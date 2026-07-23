@@ -104,3 +104,41 @@ def clean_JSONLD_sourceData(jsonld, config):
     jsonld = convert_param_list_to_dict(jsonld)
 
     return jsonld
+
+
+def clean_JSONLD_background_data(jsonld):
+    """
+    Clean jsonld data that are used to replace exisiting process data.
+    Generally pulled from the Federal LCA Commons.
+
+    Used before copying replacement processes into the base inventory.
+    Does not map elementary flows to FEDEFL, as FLCAC data already uses
+    federal elementary flow UUIDs.
+
+    Co-products of background providers are not needed as separate products:
+    drop non-quantitative-reference product/waste outputs so each process has
+    one production exchange. Then clone product
+    UUIDs that are shared across multiple processes so the matrix stays
+    square. Elementary flows stay on the process and are attributed to the
+    remaining reference product.
+
+    Keeps openLCA ``isInput`` through cleaning. Immediately before
+    ``apply_strategies()``, ``correct_jsonld_input_key`` syncs both ``isInput``
+    and ``input`` (Brightway strategies require different keys in one pass).
+    """
+    # Apply the Opposite Direction Approach for waste management
+    jsonld = apply_opposite_direction_approach(jsonld)
+    # Replace location dictionary with a single entry for the US
+    jsonld = reset_location_dict(jsonld)
+    # Set all process locations to US
+    jsonld = replace_process_location(jsonld)
+    # Set all exchange locations to US
+    jsonld = replace_exchange_locations(jsonld)
+    # One production exchange per process
+    jsonld = drop_non_reference_product_outputs(jsonld)
+    # One unique product UUID per producing process (square Brightway matrix)
+    jsonld = clone_shared_production_flows(jsonld)
+    # Convert parameters list to dictionary
+    jsonld = convert_param_list_to_dict(jsonld)
+
+    return jsonld
