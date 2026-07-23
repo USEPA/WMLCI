@@ -143,13 +143,13 @@ def remove_impact_free_objects(importer) -> None:
         # Check if the process has any output exchange that is an elementary flow
         for exchange_out in target_process_exchanges:
             # If the exchange is an output and its flow type is ELEMENTARY_FLOW, the process has impacts
-            if not exchange_out.get('isInput') and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
+            if not _exchange_is_input(exchange_out) and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
                 impact_free_status_by_id[target_process_id] = False
                 return False
         # Check all input exchanges for default providers
         for exchange_in in target_process_exchanges:
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference another process
-            if exchange_in.get('isInput') and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if _exchange_is_input(exchange_in) and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 input_default_provider = exchange_in.get('defaultProvider')
                 # If the exchange has a default provider, we need to check if that provider has impacts
                 if input_default_provider:
@@ -173,7 +173,7 @@ def remove_impact_free_objects(importer) -> None:
         retained_exchanges = []
         for exchange_to_check in process_data_to_clean.get('exchanges', []):
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference a provider
-            if exchange_to_check.get('isInput') and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if _exchange_is_input(exchange_to_check) and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 provider_info_to_check = exchange_to_check.get('defaultProvider')
                 # If the exchange has a default provider, check if it's impact-free
                 if provider_info_to_check:
@@ -662,13 +662,10 @@ def _translate_olca_formula(formula: str) -> str:
     return expr
 
 
-def _evaluate_expression(formula: str, env: dict[str, float],
-                         source_globals: dict[str, float] | None = None) -> float:
+def _evaluate_expression(formula: str, env: dict[str, float]) -> float:
     """Evaluate Python formula (case-insensitive parameter names)."""
     py_expr = _translate_olca_formula(formula)
     lookup = {k.lower(): k for k in env}
-    source_globals = source_globals or {}
-    source_lookup = {k.lower(): (k, v) for k, v in source_globals.items()}
 
     def repl_name(match: re.Match) -> str:
         token = match.group(0)
@@ -676,20 +673,6 @@ def _evaluate_expression(formula: str, env: dict[str, float],
             return token
         canon = lookup.get(token.lower())
         if canon is None:
-            source_hit = source_lookup.get(token.lower())
-            if source_hit is not None:
-                src_name, src_val = source_hit
-                log.error(
-                    f"Parameter '{token}' is not defined in package model "
-                    f"defaults or method overrides (source database value for "
-                    f"'{src_name}': {src_val}). Add it to global_defaults.yaml "
-                    f"or global_parameter_overrides to use it."
-                )
-            else:
-                log.error(
-                    f"Parameter '{token}' is not defined in package model "
-                    f"defaults or method overrides."
-                )
             raise KeyError(f"Unknown parameter '{token}' in formula '{formula}'")
         return canon
 
@@ -706,7 +689,6 @@ def _evaluate_expression(formula: str, env: dict[str, float],
 def _evaluate_dependent_formulas(
     values: dict[str, float],
     formulas: dict[str, str],
-    source_globals: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """evaluate dependent parameter formulas"""
     env, pending = dict(values), dict(formulas)
@@ -722,17 +704,12 @@ def _evaluate_dependent_formulas(
                     continue
                 canon = known.get(t.lower())
                 if canon is None:
-                    # Undefined package global — same log.error path as amountFormula.
-                    _evaluate_expression(
-                        t, env, source_globals=source_globals
-                    )
+                    needed.add(t)
                 elif canon in pending and canon != name:
                     needed.add(canon)
             if needed:
                 continue
-            env[name] = _evaluate_expression(
-                formula, env, source_globals=source_globals
-            )
+            env[name] = _evaluate_expression(formula, env)
             del pending[name]
             progressed = True
         if not progressed:
@@ -767,30 +744,60 @@ def _process_param_dict(process: dict) -> tuple[dict[str, float], dict[str, str]
     return values, formulas
 
 
-def recalculate_amounts_from_formulas(jsonld, config: dict[str, Any]):
+def recalculate_amounts_from_formulas(
+    jsonld,
+    config: dict[str, Any],
+    dataset_name: str | None = None,
+):
     """
     Recompute exchange amounts from amountFormula using model defaults and
     optional method YAML overrides. Process-derived formulas come from JSON-LD.
 
-    Source/FLCAC GLOBAL_SCOPE parameters are not applied. Only package
-    ``global_defaults.yaml`` and method ``global_parameter_overrides`` define
-    globals. Missing names trigger log.error (with source value if present).
+    Prefer package ``global_defaults.yaml`` / method overrides. If a global is
+    missing there but present on the imported dataset, log and use that value.
     """
-    global_values, global_derived, process_defaults = _load_model_defaults()
-    # Lookup only for error messages — do not merge into the formula env.
-    source_globals, _source_derived = _process_param_dict(
-        {"parameters": jsonld.data.get("parameters")}
+    dataset_label = (
+        dataset_name
+        or config.get("inventory_source")
+        or "unknown"
     )
+    global_values, global_derived, process_defaults = _load_model_defaults()
+    source_params = jsonld.data.get("parameters") or {}
+    source_globals, _source_derived = _process_param_dict(
+        {"parameters": source_params}
+    )
+    source_units = {}
+    for p in (
+        source_params.values()
+        if isinstance(source_params, dict)
+        else source_params
+    ):
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        # openLCA stores units in description (e.g. "sh tn"); skip long notes
+        desc = str(p.get("description") or "").strip()
+        if desc and "\n" not in desc and len(desc) <= 80:
+            source_units[p["name"]] = desc
     for name in global_values:
         global_derived.pop(name, None)
     for name, val in (config.get("global_parameter_overrides") or {}).items():
         global_values[str(name)] = float(val)
         global_derived.pop(str(name), None)
+    # Fill gaps from the imported dataset (warn only for non-zero fallbacks)
+    for name, val in source_globals.items():
+        if name not in global_values:
+            if val != 0:
+                unit = source_units.get(name)
+                value_str = f"{name} = {val} {unit}" if unit else f"{name} = {val}"
+                log.info(
+                    f"No defined global parameter in model_defaults. "
+                    f"Using {value_str}, as defined in imported dataset "
+                    f"{dataset_label}."
+                )
+            global_values[name] = val
     process_overrides = config.get("process_parameter_overrides") or {}
 
-    env_global = _evaluate_dependent_formulas(
-        global_values, global_derived, source_globals=source_globals
-    )
+    env_global = _evaluate_dependent_formulas(global_values, global_derived)
 
     n_formula = 0
     for process_id, process in jsonld.data.get("processes", {}).items():
@@ -804,9 +811,7 @@ def recalculate_amounts_from_formulas(jsonld, config: dict[str, Any]):
             proc_forms.pop(str(k), None)
 
         env = {**env_global, **proc_vals}
-        env = _evaluate_dependent_formulas(
-            env, proc_forms, source_globals=source_globals
-        )
+        env = _evaluate_dependent_formulas(env, proc_forms)
 
         params = process.get("parameters") or {}
         for p in (params.values() if isinstance(params, dict) else params):
@@ -818,9 +823,7 @@ def recalculate_amounts_from_formulas(jsonld, config: dict[str, Any]):
             if not formula:
                 continue
             n_formula += 1
-            exchange["amount"] = _evaluate_expression(
-                formula, env, source_globals=source_globals
-            )
+            exchange["amount"] = _evaluate_expression(formula, env)
 
     log.info(f"Re-evaluated {n_formula} amountFormula exchanges.")
     return jsonld
