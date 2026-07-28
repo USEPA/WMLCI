@@ -15,7 +15,7 @@ stats_arrays>=2.0
 
 # BW2.5 pkgs
 brightway25>=1.1.1
-bw2analyzer>=0.11.37
+bw2analyzer>=0.11.7
 bw2calc>=2.5.0
 bw2data>=4.7
 bw2io>=0.9.17
