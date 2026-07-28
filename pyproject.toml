@@ -26,7 +26,7 @@ dependencies = [
     "seaborn>=0.13,<1.0.0",
 
     # EPA/Gov dependencies
-    "esupy @ git+https://github.com/USEPA/esupy.git@develop#egg=esupy",
+    "esupy @ git+https://github.com/USEPA/esupy.git#egg=esupy",
     "fedelemflowlist @ git+https://github.com/USEPA/fedelemflowlist.git#egg=fedelemflowlist",
 
     # Brightway 2.5 packages
