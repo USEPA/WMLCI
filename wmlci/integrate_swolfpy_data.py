@@ -15,18 +15,24 @@ from copy import deepcopy
 from collections import deque
 
 from wmlci.log import log
+# %%
+
 
 # Import WARM v16 JSON file
 json_ld = load_JSONLD_sourceData('waste_reduction_model_v16', datatype="jsonld", bw_database_name='db')
 
 # swolfpy data paths
 PATH_PROJECT = Path.cwd()
-swolfpy_path = PATH_PROJECT / "wmlci/data/source_data/swolfpy/SwolfPy_WTE_PW_JSON_olca2.0_20260717-114500.zip"
+swolfpy_path = PATH_PROJECT / "data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
 unzip_to_folder = (
     PATH_PROJECT
     / "wmlci/data/source_data/swolfpy"
     / "SwolfPy_WTE_PW_JSON_olca2.0_20260717-114500"
 )
+
+# %%
+
+
 # Make folder with same name as zip file to unzip to
 unzip_to_folder.mkdir(parents=True, exist_ok=True)
 # unzip file
@@ -167,3 +173,52 @@ json_ld = copy_exchanges_between_processes(
     '16c78919-ec73-3993-9c02-66a76ef78bf7',
     'e847ff05-48e3-4df0-ae4d-db2bafe56baf'
 )
+# %% confirm no flow collisions
+
+warm_ids = set(json_ld.data["flows"])
+swolf_ids = set(swolfpy.data["flows"])
+
+duplicates = warm_ids & swolf_ids
+
+print(f"{len(duplicates)} duplicate flow UUIDs")
+
+# %% merge flow dictionaries
+
+json_ld.data["flows"].update({
+    k: v
+    for k, v in swolfpy.data["flows"].items()
+    if k not in json_ld.data["flows"]
+})
+
+
+# %%write zip 
+
+import json
+import zipfile
+from pathlib import Path
+
+root = Path("olca_export")
+root.mkdir(exist_ok=True)
+
+for entity_type, entities in json_ld.data.items():
+
+    folder = root / entity_type
+    folder.mkdir(exist_ok=True)
+
+    for obj in entities.values():
+
+        filename = Path(obj["filename"]).name
+
+        target = folder / filename
+
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+
+n = len(list(root.rglob("*.json")))
+print(f"Wrote {n} json files")
+
+with zipfile.ZipFile("olca_export.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+    for file in root.rglob("*.json"):
+        zf.write(file, file.relative_to(root))
+
+print("Created olca_export.zip")
