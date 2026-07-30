@@ -41,6 +41,16 @@ def load_method_config(method_name: str) -> dict[str, Any]:
         name: _apply_process_specific_settings(defaults, overrides)
         for name, overrides in processes.items()
     }
+
+    # Parameter overrides for amountFormula re-evaluation
+    # optional in method YAML — append empty dict if does not exist
+    config["global_parameter_overrides"] = dict(
+        config.get("global_parameter_overrides") or {}
+    )
+    config["process_parameter_overrides"] = {
+        str(k): dict(v or {})
+        for k, v in (config.get("process_parameter_overrides") or {}).items()
+    }
     return config
 
 

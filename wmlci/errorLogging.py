@@ -62,8 +62,8 @@ def find_production_exchange_errors(jsonld):
     print process and exchange info for missing unit group id
     this is a debugging function that should help find causes of the 'Failed Allocation' assertion error
 
-    running methods edit_non_quant_ref_flow_type() and apply_opposite_direction_approach() should result
-    in this method producing no outputs
+    running drop_non_reference_product_outputs() and apply_opposite_direction_approach()
+    should result in this method producing no outputs
 
     :param jsonld:
     :return:

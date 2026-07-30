@@ -11,13 +11,20 @@ import bw2data as bd
 from wmlci.disaggregation import split_multi_product_processes
 from wmlci.editImporter import (
     convert_lcia_param_list_to_dict,
+    correct_jsonld_input_key,
     map_lcia_to_fedelemflowlist_UUIDs,
 )
 from wmlci.errorLogging import check_for_errors_in_jsonld_import
 from wmlci.jsonld_loader import clean_JSONLD_sourceData, load_JSONLD_sourceData
 from wmlci.log import log
 from wmlci.method_config import load_method_config
-from wmlci.openlca import calculate_lca_results, resolve_processes, write_lca_outputs
+from wmlci.openlca import (
+    calculate_lca_results,
+    functional_unit_label,
+    resolve_processes,
+    write_lca_outputs,
+)
+from wmlci.technosphere_updates import update_technosphere_flows
 
 
 def run_bw_lca(method_name: str) -> dict[str, Any]:
@@ -27,7 +34,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     Parameters
     ----------
     method_name
-        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_demo``).
+        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_pilot``).
 
     Returns
     -------
@@ -36,82 +43,64 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     """
     config = load_method_config(method_name)
     log.info(
-        f"Running Brightway LCA method: {config.get('method_name', method_name)}"
+        f"Running LCA method: {config.get('method_name', method_name)}"
     )
 
     bd.projects.set_current(config["bw_project_name"])
 
-    reimport_inventory = config.get("reimport_inventory", False)
-    reimport_lcia = config.get("reimport_lcia", False)
-    if reimport_inventory and not reimport_lcia:
-        # FEDEFL harmonization gives biosphere nodes new codes on each import
-        log.info(
-            "reimport_inventory is true — reimporting LCIA methods to relink CFs."
-        )
-        reimport_lcia = True
-
     db_name = config["inventory_database"]
-    # If database exists, check that database is not empty - which occurs when
-    # there are errors in the run; otherwise import and run
-    if (
-        not reimport_inventory
-        and db_name in bd.databases
-        and len(bd.Database(db_name)) > 0
-    ):
-        log.info(f"'{db_name}' is already present in the project - skipping import.")
-    else:
-        source = config["inventory_source"]
-        jsonld = load_JSONLD_sourceData(
-            source, datatype="jsonld", bw_database_name=db_name
-        )
-        # split multi-product processes so the technosphere matrix is square
-        jsonld = split_multi_product_processes(jsonld)
-        # check for errors in imported data - these checks do not fix the errors
-        check_for_errors_in_jsonld_import(jsonld)
-        # apply common clean up procedures
-        jsonld = clean_JSONLD_sourceData(jsonld)
-        # check for errors again
-        log.info("Checking errors are fixed")
-        check_for_errors_in_jsonld_import(jsonld)
-        # fix issues when openLCA and brightway have to talk by manipulating data sets
-        jsonld.apply_strategies()
-        # merge biosphere flows
-        # jsonld.write_separate_biosphere_database()
-        jsonld.merge_biosphere_flows()
-        # checking if everything worked out with strategies and linking
-        jsonld.statistics()
-        # jsonld.write_excel(only_unlinked=False)  # set to True if errors
-        # save the database
-        jsonld.write_database()
+    source = config["inventory_source"]
+    jsonld = load_JSONLD_sourceData(
+        source,
+            datatype="jsonld",
+            bw_database_name=db_name,
+            data_version=config.get("inventory_source_version"),
+    )
+    # split multi-product processes so the technosphere matrix is square
+    jsonld = split_multi_product_processes(jsonld)
+    # check for errors in imported data - these checks do not fix the errors
+    check_for_errors_in_jsonld_import(jsonld)
+    # apply common clean up procedures
+    jsonld = clean_JSONLD_sourceData(jsonld, config)
+    # replace input providers using technosphere_updates YAML
+    jsonld = update_technosphere_flows(jsonld, config["processes"], config)
+    # check for errors again
+    log.info("Checking errors are fixed")
+    check_for_errors_in_jsonld_import(jsonld)
+    # keep duplicative input/isInput keys because
+    # json_ld_allocate_datasets uses input, while json_ld_add_activity_unit uses isInput
+    jsonld = correct_jsonld_input_key(jsonld)
+    # fix issues when openLCA and brightway have to talk by manipulating data sets
+    jsonld.apply_strategies()
+    # merge biosphere flows
+    # jsonld.write_separate_biosphere_database()
+    jsonld.merge_biosphere_flows()
+    # checking if everything worked out with strategies and linking
+    jsonld.statistics()
+    # jsonld.write_excel(only_unlinked=False)  # set to True if errors
+    # save the database
+    jsonld.write_database()
 
     # LCIA methods import
     lcia_db_name = config["lcia_db_name"]
-    existing = [m for m in bd.methods if lcia_db_name in m]
-    methods_have_cfs = any(len(bd.Method(m).load()) > 0 for m in existing)
-
-    if (
-        not reimport_lcia and existing and methods_have_cfs
-    ):
-        log.info("LCIA methods found - skipping LCIA import.")
-    else:
-        jsonldlcia = load_JSONLD_sourceData(
-            config["lcia_input"],
-            datatype="jsonld_lcia",
-            bw_database_name=lcia_db_name,
-        )
-        # convert parameter lists to dicts
-        jsonldlcia = convert_lcia_param_list_to_dict(jsonldlcia)
-        # prepare LCIA - apply strategies, harmonize CF flows to FEDEFL,
-        # link to inventory by UUID
-        jsonldlcia.apply_strategies()
-        jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
-            jsonldlcia, sourcelistname="IPCC"
-        )
-        jsonldlcia.match_biosphere_by_id(config["inventory_database"])
-        # drop the CFs that do not match a flow
-        jsonldlcia.drop_unlinked(verbose=True)
-        jsonldlcia.statistics()
-        jsonldlcia.write_methods(overwrite=True)
+    jsonldlcia = load_JSONLD_sourceData(
+        config["lcia_input"],
+        datatype="jsonld_lcia",
+        bw_database_name=lcia_db_name,
+    data_version=config.get("lcia_input_version"),)
+    # convert parameter lists to dicts
+    jsonldlcia = convert_lcia_param_list_to_dict(jsonldlcia)
+    # prepare LCIA - apply strategies, harmonize CF flows to FEDEFL,
+    # link to inventory by UUID
+    jsonldlcia.apply_strategies()
+    jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
+        jsonldlcia, sourcelistname="IPCC"
+    )
+    jsonldlcia.match_biosphere_by_id(config["inventory_database"])
+    # drop the CFs that do not match a flow
+    jsonldlcia.drop_unlinked(verbose=True)
+    jsonldlcia.statistics()
+    jsonldlcia.write_methods(overwrite=True)
 
     db = bd.Database(config["inventory_database"])
     log.info(
@@ -127,9 +116,15 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         )
 
     processes = resolve_processes(db, config)
-    log.info(f"Assessing {len(processes)} scenarios:")
+    scenario_lines = []
     for act, product, process_settings in processes:
-        log.info(f"  - {act['name']} -> {product['name']}")
+        fu_label = functional_unit_label(
+            product.get("name", ""), process_settings["functional_unit"]
+        )
+        scenario_lines.append(f"  - {fu_label} by process: {act['name']}")
+    log.info(
+        f"Assessing {len(processes)} scenarios:\n" + "\n".join(scenario_lines)
+    )
 
     results_df, detail_df = calculate_lca_results(db, processes, config)
     paths = write_lca_outputs(results_df, detail_df, config)

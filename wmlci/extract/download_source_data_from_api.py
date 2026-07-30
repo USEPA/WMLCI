@@ -9,23 +9,23 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib import parse
 
-import yaml
 from dotenv import load_dotenv
 from esupy.processed_data_mgmt import mkdir_if_missing
 from esupy.remote import make_url_request
 
+from wmlci.extract.extract_common import (
+    API_KEYS_ENV_PATH,
+    load_extract_yaml,
+    source_data_dir,
+)
 from wmlci.log import log
 from wmlci.metadata import set_meta, write_metadata
-from wmlci.settings import source_data_path
-
-EXTRACTPATH = Path(__file__).resolve().parent
-API_KEYS_ENV_PATH = EXTRACTPATH / "API_Keys.env"
 
 
 class APIError(Exception):
@@ -36,14 +36,6 @@ class APIError(Exception):
             f"API key '{api_source}' not found in {API_KEYS_ENV_PATH}. "
             "Add key to API_Keys.env."
         )
-
-
-def _load_config(method_name: str) -> dict[str, Any]:
-    path = EXTRACTPATH / f"{method_name}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"Extract config not found: {path}")
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
 
 
 def _api_key(config: dict[str, Any]) -> str:
@@ -100,30 +92,52 @@ def _read_token(resp) -> str:
     return token
 
 
-def _fetch_date_published(config: dict[str, Any]) -> str | None:
-    """FLCAC dataset ``lastChange`` (website Last change) via API."""
+def _fetch_flcac_source_metadata(
+    config: dict[str, Any], version: str
+) -> tuple[str, str | None]:
+    """Return FLCAC source metadata for a version
+       returns: commit_id, date_published"""
     source_url = config.get("source_url", "")
-    if "/lca-collaboration/" not in source_url or not config.get("api_name"):
-        return None
-
-    browse_path = (
-        "/browse/"
-        + source_url.split("/lca-collaboration/", 1)[1].replace("/dataset/", "/")
-    )
-    browse_url = _build_url(
+    if "/lca-collaboration/" not in source_url:
+        raise ValueError(f"Cannot parse group/repo from source_url: {source_url}")
+    parts = source_url.split("/lca-collaboration/", 1)[1].split("/")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot parse group/repo from source_url: {source_url}")
+    group, repo = parts[0], parts[1]
+    repo_url = _build_url(
         {
             **(config.get("url") or {}),
-            "api_path": browse_path,
+            "api_path": f"/repository/{group}/{repo}",
             "url_params": {"api_key": "__apiKey__"},
         },
         {"apiKey": _api_key(config)},
     )
-    last_change = _request(browse_url).json().get("lastChange")
-    return str(last_change) if last_change else None
+    repo_info = _request(repo_url).json()
+    for release in repo_info.get("releases", []):
+        if release.get("version") != version:
+            continue
+        commit_id = str(release["id"])
+        settings = repo_info.get("settings", {})
+        release_date = release.get("releaseDate") or (
+            settings.get("releaseDate")
+            if settings.get("version") == version
+            else None
+        )
+        if release_date:
+            date_published = datetime.fromtimestamp(
+                int(release_date) / 1000
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            return commit_id, date_published
+        return commit_id, None
+    group_repo = repo_info.get("settings", {}).get("repositoryPath", f"{group}/{repo}")
+    raise ValueError(f"Version {version!r} not found in releases for {group_repo}")
 
 
 def _call_url_and_download_data(
-    config: dict[str, Any], out_dir: Path, method_name: str
+    config: dict[str, Any],
+    out_dir: Path,
+    method_name: str,
+    commit_id: str | None = None,
 ) -> Path:
     shared_url = config.get("url") or {}
     steps = config.get("download_steps")
@@ -133,7 +147,12 @@ def _call_url_and_download_data(
 
     if steps:
         for step in steps[:-1]:
-            prepare_url = _build_url({**shared_url, **(step.get("url") or {})}, subs)
+            step_url = {**shared_url, **(step.get("url") or {})}
+            if commit_id:
+                url_params = dict(step_url.get("url_params") or {})
+                url_params["commitId"] = commit_id
+                step_url["url_params"] = url_params
+            prepare_url = _build_url(step_url, subs)
             token_key = step.get("response_as", "token")
             subs[token_key] = parse.quote(_read_token(_request(prepare_url)), safe="")
 
@@ -153,7 +172,7 @@ def _call_url_and_download_data(
     out_path = out_dir / filename
     resp = _request(url)
     out_path.write_bytes(resp.content)
-    log.info(f"Saved {out_path} ({len(resp.content)} bytes)")
+    log.info(f"Downloading and extracting {out_path}")
 
     if unzip:
         if out_path.suffix.lower() != ".zip":
@@ -169,13 +188,28 @@ def _call_url_and_download_data(
     return out_path
 
 
-def download_source_data(method_name: str) -> Path:
+def download_source_data(method_name: str, version: str | None = None) -> Path:
     """Download (and optionally unzip) source data for an extract method yaml."""
-    config = _load_config(method_name)
-    out_dir = source_data_path / method_name
+    config = load_extract_yaml(method_name)
+    version = version or config.get("version")
+    out_dir = source_data_dir(method_name, version)
     mkdir_if_missing(out_dir)
-    out_path = _call_url_and_download_data(config, out_dir, method_name)
-    date_published = _fetch_date_published(config)
+
+    commit_id = None
+    date_published = None
+    source_name = config.get("source_name", method_name)
+    if version:
+        commit_id, date_published = _fetch_flcac_source_metadata(config, version)
+        log.info(f"Returning version {version} of {source_name}")
+
+    log.info(
+        f"Beginning download of {source_name} - "
+        "this might take a while depending on data size"
+    )
+    out_path = _call_url_and_download_data(
+        config, out_dir, method_name, commit_id=commit_id
+    )
+
     if date_published:
         config["date_published"] = date_published
 

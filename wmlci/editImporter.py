@@ -2,18 +2,91 @@
 Functions to clean up imported olca data and generate square technosphere matrix
 """
 
+import re
+from collections import defaultdict
+from copy import deepcopy
+from typing import Any, Set
+
 import fedelemflowlist
 import pandas as pd
+import yaml
 
 from bw2io.importers.json_ld import JSONLDImporter
 
 from wmlci.errorLogging import validate_jsonld_exchanges
 from wmlci.log import log
+from wmlci.settings import model_defaults_path
 
-from typing import Set
+from esupy.util import make_uuid
 
 # values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
 _NO_TARGET = {"n.a.", "nan", "none", ""}
+
+
+##############################################################
+### Ensure carbon storage exchanges are credits (negative) ###
+##############################################################
+
+def apply_carbon_storage_credit(jsonld):
+    """
+    Flip positive carbon storage exchanges to emission-to-air CO2 credits in kg.
+
+    In the v16 Excel tool, we get a credit for carbon storage from landfilling (so negative carbon).
+    If we do not apply this function, this Python model, does not provide that negative credit
+    because of how the fedefl mapping works. Carbon storage is classified as "resource/air" while
+    other carbon sources are classified as "emissions/air", so carbon storage is never
+    subtracted out.
+
+    This function reclassifies carbon storage as emissions/air so it is subtracted out.
+
+    """
+    co2 = next(
+        (
+            f
+            for f in jsonld.data.get("flows", {}).values()
+            if f.get("name") == "Carbon dioxide"
+            and f.get("flowType") == "ELEMENTARY_FLOW"
+            and "emission" in (f.get("category") or "").lower()
+        ),
+        None,
+    )
+    kg = next(
+        (
+            {"@type": "Unit", "@id": u["@id"], "name": "kg"}
+            for g in jsonld.data.get("unit_groups", {}).values()
+            for u in g.get("units") or []
+            if u.get("name") == "kg"
+        ),
+        None,
+    )
+
+    n = 0
+    for p in jsonld.data.get("processes", {}).values():
+        for ex in p.get("exchanges", []):
+            formula = ex.get("amountFormula") or ""
+            amount = float(ex.get("amount") or 0)
+            if "c_storage" not in formula.lower() or amount <= 0:
+                continue
+            if kg and (ex.get("unit") or {}).get("name") in {"t", "tonne", "Mg"}:
+                amount *= 1000
+                formula = f"({formula}) * 1000"
+                ex["unit"] = kg
+            ex["amount"] = -amount
+            ex["amountFormula"] = f"-1*({formula})"
+            if co2:
+                ex["flow"] = {
+                    "@type": "Flow",
+                    "@id": co2["@id"],
+                    "name": co2["name"],
+                    "category": co2.get("category"),
+                    "flowType": "ELEMENTARY_FLOW",
+                    "refUnit": "kg",
+                }
+            n += 1
+
+    if n:
+        log.info(f"Applied carbon storage credit to {n} exchange(s).")
+    return jsonld
 
 
 ######################################################
@@ -70,13 +143,13 @@ def remove_impact_free_objects(importer) -> None:
         # Check if the process has any output exchange that is an elementary flow
         for exchange_out in target_process_exchanges:
             # If the exchange is an output and its flow type is ELEMENTARY_FLOW, the process has impacts
-            if not exchange_out.get('isInput') and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
+            if not _exchange_is_input(exchange_out) and exchange_out.get('flow', {}).get('flowType') == 'ELEMENTARY_FLOW':
                 impact_free_status_by_id[target_process_id] = False
                 return False
         # Check all input exchanges for default providers
         for exchange_in in target_process_exchanges:
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference another process
-            if exchange_in.get('isInput') and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if _exchange_is_input(exchange_in) and exchange_in.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 input_default_provider = exchange_in.get('defaultProvider')
                 # If the exchange has a default provider, we need to check if that provider has impacts
                 if input_default_provider:
@@ -100,7 +173,7 @@ def remove_impact_free_objects(importer) -> None:
         retained_exchanges = []
         for exchange_to_check in process_data_to_clean.get('exchanges', []):
             # If the exchange is an input and its flow type is PRODUCT_FLOW, it may reference a provider
-            if exchange_to_check.get('isInput') and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
+            if _exchange_is_input(exchange_to_check) and exchange_to_check.get('flow', {}).get('flowType') == 'PRODUCT_FLOW':
                 provider_info_to_check = exchange_to_check.get('defaultProvider')
                 # If the exchange has a default provider, check if it's impact-free
                 if provider_info_to_check:
@@ -157,10 +230,21 @@ def apply_opposite_direction_approach(jsonld):
             else:
                 # Edit waste outputs from processes that are inputs to waste treatment
                 if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == False:
+                    if exchange.get("amountFormula"):
+                        exchange["amountFormula"] = (
+                            f"-({exchange.get('amountFormula')})"
+                        )
                     exchange["amount"] *= -1  # make value negative
                     exchange["isInput"] = True # make input
+                    # Brightway json_ld_label_exchange_type requires isInput
+                    # exchanges to be PRODUCT_FLOW.
+                    flow["flowType"] = "PRODUCT_FLOW"
                 # Edit waste input to waste treatment
-                if flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == True:
+                elif flow.get("flowType") == 'WASTE_FLOW' and exchange.get("isInput") == True:
+                    if exchange.get("amountFormula"):
+                        exchange["amountFormula"] = (
+                            f"-({exchange.get('amountFormula')})"
+                        )
                     exchange["amount"] *= -1  # make value negative
                     exchange["isQuantitativeReference"] = True  # make quantitative reference
                     exchange["isInput"] = False  # make output
@@ -290,20 +374,163 @@ def remove_process_allocation_factors(jsonld):
 
     return jsonld
 
+
+def _exchange_is_input(exc: dict) -> bool:
+    if "input" in exc:
+        return bool(exc["input"])
+    return bool(exc.get("isInput"))
+
+
+def drop_non_reference_product_outputs(jsonld):
+    """
+    Drop non-quantitative-reference product/waste outputs so each process has
+    one production exchange.
+
+    Use when co-products are not needed as separate products. All burden stays
+    on the reference product.
+    """
+    log.info("Dropping non-quantitative-reference co-product outputs...")
+    n_dropped = 0
+    n_cleared_af = 0
+
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        if process.get("type") in {"emission", "product"}:
+            continue
+        exchanges = process.get("exchanges") or []
+        outputs = [
+            exc
+            for exc in exchanges
+            if not _exchange_is_input(exc)
+            and not exc.get("avoidedProduct")
+            and (exc.get("flow") or {}).get("flowType")
+            in {"PRODUCT_FLOW", "WASTE_FLOW"}
+        ]
+        if len(outputs) <= 1:
+            if process.get("allocationFactors"):
+                process.pop("allocationFactors", None)
+                process["defaultAllocationMethod"] = "NO_ALLOCATION"
+                n_cleared_af += 1
+            continue
+
+        qref = next(
+            (
+                exc
+                for exc in outputs
+                if exc.get("isQuantitativeReference")
+                or exc.get("quantitativeReference")
+            ),
+            None,
+        )
+        if qref is None:
+            product_outs = [
+                exc
+                for exc in outputs
+                if (exc.get("flow") or {}).get("flowType") == "PRODUCT_FLOW"
+            ]
+            qref = product_outs[0] if product_outs else outputs[0]
+
+        drop_ids = {id(exc) for exc in outputs if exc is not qref}
+        before = len(exchanges)
+        process["exchanges"] = [
+            exc for exc in exchanges if id(exc) not in drop_ids
+        ]
+        n_dropped += before - len(process["exchanges"])
+        if process.get("allocationFactors"):
+            process.pop("allocationFactors", None)
+            process["defaultAllocationMethod"] = "NO_ALLOCATION"
+            n_cleared_af += 1
+
+    log.info(
+        f"Dropped {n_dropped} non-reference co-product output(s); "
+        f"cleared allocationFactors on {n_cleared_af} process(es)."
+    )
+    return jsonld
+
+
+def clone_shared_production_flows(jsonld):
+    """
+    Ensure each process has a unique production product flow.
+
+    Background datasets ( electricity / transport) often reuse one product-flow
+    UUID across many regional processes. Brightway then builds a non-square
+    technosphere matrix with more process columns than product rows. Clone the product
+    flow per colliding producer and retarget that producer's consumers.
+    """
+    processes = jsonld.data.get("processes", {})
+    flows = jsonld.data.setdefault("flows", {})
+
+    producers = defaultdict(list)
+    for pid, process in processes.items():
+        for exc in process.get("exchanges") or []:
+            if _exchange_is_input(exc) or exc.get("avoidedProduct"):
+                continue
+            flow = exc.get("flow") or {}
+            if flow.get("flowType") != "PRODUCT_FLOW":
+                continue
+            flow_id = flow.get("@id")
+            if flow_id:
+                producers[flow_id].append((pid, exc))
+
+    n_cloned = 0
+    n_retargeted = 0
+    for flow_id, entries in producers.items():
+        if len(entries) <= 1:
+            continue
+        base_flow = flows.get(flow_id) or deepcopy(entries[0][1].get("flow") or {})
+        # Keep the first producer on the original flow; give others unique clones.
+        for pid, production_exc in entries[1:]:
+            new_id = make_uuid(f"{pid}:{flow_id}")
+            new_flow = deepcopy(base_flow)
+            new_flow["@id"] = new_id
+            flows[new_id] = new_flow
+            production_exc["flow"] = deepcopy(new_flow)
+            n_cloned += 1
+            # Retarget consumers of this producer that still point at the old flow.
+            for process in processes.values():
+                for exc in process.get("exchanges") or []:
+                    if not _exchange_is_input(exc):
+                        continue
+                    provider = exc.get("defaultProvider") or {}
+                    exc_flow = exc.get("flow") or {}
+                    if (
+                        provider.get("@id") == pid
+                        and exc_flow.get("@id") == flow_id
+                    ):
+                        exc["flow"] = deepcopy(new_flow)
+                        n_retargeted += 1
+
+    log.info(
+        f"Cloned shared production flows: "
+        f"{n_cloned} cloned flows, {n_retargeted} consumption edges retargeted."
+    )
+    return jsonld
+
+
 def correct_jsonld_input_key(jsonld):
     '''
-    fix for strategy json_ld_allocate_datasets() from strategies/json_ld.py
-    changes 'isInput' key in exchanges to 'input' in all exchanges within processes
+    Sync exchange direction for Brightway ``apply_strategies()``.
+
+    Strategies disagree within one call: ``json_ld_allocate_datasets`` indexes
+    ``exc["input"]``, while ``json_ld_add_activity_unit`` uses ``isInput``.
+    Set both to the same boolean immediately before strategies (prefer existing
+    ``isInput``, else ``input`` / ``IsInput``). Cleaning may use ``isInput`` alone.
     :param jsonld:
     :return:
     '''
-    for process_key, process in jsonld.data.get("processes", {}).items():
+    for process in jsonld.data.get("processes", {}).values():
         for exc in process.get("exchanges", []):
-            if "isInput" in exc:
-                exc["input"] = exc.pop("isInput")
             if "IsInput" in exc:
-                exc["input"] = exc.pop("IsInput")
+                val = bool(exc.pop("IsInput"))
+            elif "isInput" in exc:
+                val = bool(exc["isInput"])
+            elif "input" in exc:
+                val = bool(exc["input"])
+            else:
+                continue
+            exc["input"] = val
+            exc["isInput"] = val
     return jsonld
+
 
 def convert_param_list_to_dict(jsonld):
     """
@@ -324,8 +551,13 @@ def convert_param_list_to_dict(jsonld):
     for process_id, process in processes.items():
         params_list = process.get("parameters", [])
         if isinstance(params_list, list):
-            # Convert list to dict keyed by 'name'
-            params_dict = {param["@id"]: param for param in params_list if "@id" in param}
+            # Key by @id when present (waste reduction model), else by name. FLCAC PROCESS_SCOPE
+            # parameters carry no @id, so keying on @id alone silently drops them.
+            params_dict = {
+                (param.get("@id") or param.get("name")): param
+                for param in params_list
+                if isinstance(param, dict) and (param.get("@id") or param.get("name"))
+            }
             process["parameters"] = params_dict
 
     return jsonld
@@ -355,6 +587,251 @@ def convert_lcia_param_list_to_dict(jsonld):
 
     return jsonld
 
+
+##############################################################
+### Recalc amountFormula from model defaults / overrides ###
+##############################################################
+
+_FORMULA_KEYWORDS = {"if", "else", "e"}
+
+
+def _load_model_defaults() -> tuple[
+    dict[str, float], dict[str, str], dict[str, dict[str, float]]
+]:
+    """Load global + process defaults from ``utils/model_defaults/``."""
+    with (model_defaults_path / "global_defaults.yaml").open(encoding="utf-8") as f:
+        global_raw = yaml.safe_load(f) or {}
+    values = {
+        str(k): float(v) for k, v in (global_raw.get("parameters") or {}).items()
+    }
+    derived = {
+        str(name): str(spec["formula"])
+        for name, spec in (global_raw.get("derived") or {}).items()
+        if isinstance(spec, dict) and spec.get("formula")
+    }
+
+    with (model_defaults_path / "process_parameters.yaml").open(encoding="utf-8") as f:
+        process_raw = yaml.safe_load(f) or {}
+    process_defaults = {
+        str(proc): {str(k): float(v) for k, v in (params or {}).items()}
+        for proc, params in (process_raw.get("process_parameters") or {}).items()
+    }
+    return values, derived, process_defaults
+
+
+def _translate_olca_formula(formula: str) -> str:
+    """Translate openLCA formula syntax into Python syntax so it can be evaluated"""
+    expr = str(formula).strip()
+    # replace "=" with "=="
+    expr = re.sub(r"(?<![=<>!])=(?!=)", "==", expr)
+
+    def _split_if_args(inside: str) -> tuple[str, str, str] | None:
+        parts, depth, start = [], 0, 0
+        for i, ch in enumerate(inside):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif ch == ";" and depth == 0:
+                parts.append(inside[start:i])
+                start = i + 1
+        parts.append(inside[start:])
+        return (parts[0], parts[1], parts[2]) if len(parts) == 3 else None
+
+    for _ in range(50):
+        idx = expr.lower().find("if(")
+        if idx < 0:
+            break
+        open_paren = idx + 2
+        depth, close = 0, None
+        for i in range(open_paren, len(expr)):
+            if expr[i] == "(":
+                depth += 1
+            elif expr[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    close = i
+                    break
+        if close is None:
+            break
+        split = _split_if_args(expr[open_paren + 1 : close])
+        if split is None:
+            break
+        cond, then, else_ = split
+        expr = f"{expr[:idx]}(({then}) if ({cond}) else ({else_})){expr[close + 1:]}"
+    return expr
+
+
+def _evaluate_expression(formula: str, env: dict[str, float]) -> float:
+    """Evaluate Python formula (case-insensitive parameter names)."""
+    py_expr = _translate_olca_formula(formula)
+    lookup = {k.lower(): k for k in env}
+
+    def repl_name(match: re.Match) -> str:
+        token = match.group(0)
+        if token.lower() in _FORMULA_KEYWORDS:
+            return token
+        canon = lookup.get(token.lower())
+        if canon is None:
+            raise KeyError(f"Unknown parameter '{token}' in formula '{formula}'")
+        return canon
+
+    # look for exponents
+    py_expr = re.sub(r"(?<![0-9.])[A-Za-z_][A-Za-z0-9_]*", repl_name, py_expr)
+    try:
+        return float(eval(py_expr, {"__builtins__": {}}, dict(env)))  # noqa: S307
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to evaluate formula '{formula}' (-> '{py_expr}'): {exc}"
+        ) from exc
+
+
+def _evaluate_dependent_formulas(
+    values: dict[str, float],
+    formulas: dict[str, str],
+) -> dict[str, float]:
+    """evaluate dependent parameter formulas"""
+    env, pending = dict(values), dict(formulas)
+    for _ in range(len(pending) + 5):
+        if not pending:
+            return env
+        progressed = False
+        known = {k.lower(): k for k in {**env, **dict.fromkeys(pending, 0.0)}}
+        for name, formula in list(pending.items()):
+            needed = set()
+            for t in re.findall(r"(?<![0-9.])[A-Za-z_][A-Za-z0-9_]*", formula):
+                if t.lower() in _FORMULA_KEYWORDS:
+                    continue
+                canon = known.get(t.lower())
+                if canon is None:
+                    needed.add(t)
+                elif canon in pending and canon != name:
+                    needed.add(canon)
+            if needed:
+                continue
+            env[name] = _evaluate_expression(formula, env)
+            del pending[name]
+            progressed = True
+        if not progressed:
+            break
+    if pending:
+        raise ValueError(
+            "Could not resolve dependent parameter formulas (cycle or missing "
+            f"inputs): {sorted(pending)}"
+        )
+    return env
+
+
+def _process_param_dict(process: dict) -> tuple[dict[str, float], dict[str, str]]:
+    """Split process parameters into input values and derived formulas."""
+    values: dict[str, float] = {}
+    formulas: dict[str, str] = {}
+    params = process.get("parameters") or {}
+    items = params.values() if isinstance(params, dict) else params
+    for p in items:
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        name, formula, value = p["name"], p.get("formula"), p.get("value")
+        is_input = p.get("isInputParameter", True)
+        if formula and not is_input:
+            formulas[name] = str(formula)
+            if value is not None:
+                values[name] = float(value)
+        elif value is not None:
+            values[name] = float(value)
+        elif formula:
+            formulas[name] = str(formula)
+    return values, formulas
+
+
+def recalculate_amounts_from_formulas(
+    jsonld,
+    config: dict[str, Any],
+    dataset_name: str | None = None,
+):
+    """
+    Recompute exchange amounts from amountFormula using model defaults and
+    optional method YAML overrides. Process-derived formulas come from JSON-LD.
+
+    Prefer package ``global_defaults.yaml`` / method overrides. If a global is
+    missing there but present on the imported dataset, log and use that value.
+    """
+    dataset_label = (
+        dataset_name
+        or config.get("inventory_source")
+        or "unknown"
+    )
+    global_values, global_derived, process_defaults = _load_model_defaults()
+    source_params = jsonld.data.get("parameters") or {}
+    source_globals, _source_derived = _process_param_dict(
+        {"parameters": source_params}
+    )
+    source_units = {}
+    for p in (
+        source_params.values()
+        if isinstance(source_params, dict)
+        else source_params
+    ):
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        # openLCA stores units in description (e.g. "sh tn"); skip long notes
+        desc = str(p.get("description") or "").strip()
+        if desc and "\n" not in desc and len(desc) <= 80:
+            source_units[p["name"]] = desc
+    for name in global_values:
+        global_derived.pop(name, None)
+    for name, val in (config.get("global_parameter_overrides") or {}).items():
+        global_values[str(name)] = float(val)
+        global_derived.pop(str(name), None)
+    # Fill gaps from the imported dataset (warn only for non-zero fallbacks)
+    for name, val in source_globals.items():
+        if name not in global_values:
+            if val != 0:
+                unit = source_units.get(name)
+                value_str = f"{name} = {val} {unit}" if unit else f"{name} = {val}"
+                log.info(
+                    f"No defined global parameter in model_defaults. "
+                    f"Using {value_str}, as defined in imported dataset "
+                    f"{dataset_label}."
+                )
+            global_values[name] = val
+    process_overrides = config.get("process_parameter_overrides") or {}
+
+    env_global = _evaluate_dependent_formulas(global_values, global_derived)
+
+    n_formula = 0
+    for process_id, process in jsonld.data.get("processes", {}).items():
+        if process.get("type") in {"emission", "product"}:
+            continue
+        process_name = process.get("name", process_id)
+        proc_vals, proc_forms = _process_param_dict(process)
+        proc_vals.update(process_defaults.get(process_name) or {})
+        for k, v in (process_overrides.get(process_name) or {}).items():
+            proc_vals[str(k)] = float(v)
+            proc_forms.pop(str(k), None)
+
+        env = {**env_global, **proc_vals}
+        env = _evaluate_dependent_formulas(env, proc_forms)
+
+        params = process.get("parameters") or {}
+        for p in (params.values() if isinstance(params, dict) else params):
+            if isinstance(p, dict) and p.get("name") in env:
+                p["value"] = env[p["name"]]
+
+        for exchange in process.get("exchanges", []):
+            formula = exchange.get("amountFormula")
+            if not formula:
+                continue
+            n_formula += 1
+            exchange["amount"] = _evaluate_expression(formula, env)
+
+    log.info(f"Re-evaluated {n_formula} amountFormula exchanges.")
+    return jsonld
+
+
+##############################################################
+### Flowmapping                                            ###
+##############################################################
 
 def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
     """
@@ -445,16 +922,13 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
                 conversion_factor = 1.0
             if conversion_factor != 1 and "amount" in exchange:
                 if "amountFormula" in exchange:
-                    log.warning(
-                        f"ConversionFactor {conversion_factor} not applied to "
-                        f"parameterized exchange (process {process_k}, exchange "
-                        f"{idx}) because it has an amountFormula."
+                    exchange["amountFormula"] = (
+                        f"({exchange['amountFormula']}) * {conversion_factor}"
                     )
-                else:
-                    exchange["amount"] = exchange["amount"] * conversion_factor
-                    target_unit = target.get("TargetUnit")
-                    if "refUnit" in flow and target_unit:
-                        flow["refUnit"] = target_unit
+                exchange["amount"] = exchange["amount"] * conversion_factor
+                target_unit = target.get("TargetUnit")
+                if "refUnit" in flow and target_unit:
+                    flow["refUnit"] = target_unit
 
     log.info(
         f"Harmonized {flows_remapped} flows and {exchanges_remapped} exchange "

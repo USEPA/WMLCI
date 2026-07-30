@@ -1,0 +1,128 @@
+# Process input default parameters - override in method yamls
+# Method YAML: process_parameter_overrides:
+#   "MSW recycling of PET":
+#     recovered_material: X.XX
+
+process_parameters:
+  Distillate oil, consumption:
+    pre_combustion_scale_up_factor_distillate: 1.185
+  Electricity generation, at grid, National:
+    CH4_non_baseload: 0.000111
+    CO2_non_baseload: 1.500955
+    conversion_efficiency: 9014.614
+    N2O_non_baseload: 1.8e-05
+  MSW combustion of HDPE:
+    C_converted_to_CO2_in_combustion: 0.98
+    diesel_wood_chipping: 0.0
+    energy_content: 39.97
+    mass_burn_efficiency: 0.17827700000000002
+    MTCO2_per_MBTU: 0.0
+    N2O_emission: 0.0
+    steel_recovered: 0.0
+  MSW combustion of Mixed Plastics:
+    C_converted_to_CO2_in_combustion: 0.0
+    diesel_wood_chipping: 0.0
+    energy_content: 0.0
+    mass_burn_efficiency: 0.17827700000000002
+    MTCO2_per_MBTU: 0.0
+    N2O_emission: 0.0
+    steel_recovered: 0.0
+  MSW combustion of PET:
+    C_converted_to_CO2_in_combustion: 0.98
+    diesel_wood_chipping: 0.0
+    energy_content: 21.2
+    mass_burn_efficiency: 0.17827700000000002
+    MTCO2_per_MBTU: 0.0
+    N2O_emission: 0.0
+    steel_recovered: 0.0
+  MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions:
+    CH4_emitted_energy_recovery: 0.3192963475246532
+    CH4_flared: 0.5094291914248539
+    CH4_oxidized: 0.10233239319824021
+    CH4_recovered_for_energy: 0.5157856969427853
+  MSW recycling of HDPE:
+    recovered_material: 0.762660158633
+  MSW recycling of Mixed Plastics:
+    recovered_material: 0.0
+  MSW recycling of PET:
+    recovered_material: 0.771724031486
+  Process energy, for product manufacturing from HDPE, using 100% recycled inputs:
+    CH4_energy_recycled: 8.51443e-05
+    CO2_energy_recycled: 0.057074497
+  Process energy, for product manufacturing from HDPE, using 100% virgin inputs:
+    CH4_energy_virgin: 4.04458929629686e-05
+    CO2_energy_virgin: 0.0467457144534623
+  Process energy, for product manufacturing from PET, using 100% recycled inputs:
+    CH4_energy_recycled: 9.52743e-05
+    CO2_energy_recycled: 0.057336885
+  Process energy, for product manufacturing from PET, using 100% virgin inputs:
+    CH4_energy_virgin: 9.80592244306998e-05
+    CO2_energy_virgin: 0.0587008328054155
+  Product manufacturing, from HDPE, using 100% recycled inputs:
+    C2F6_non_energy_recycled: 0.0
+    CF4_non_energy_recycled: 0.0
+    CH4_non_energy_recycled: 0.0
+    CO2_non_energy_recycled: 0.0
+    distance_to_retailer: 497.0
+    N2O_non_energy_recycled: 0.0
+    precombustion_energy: 0.0
+    process_energy_recycled: 5.87385106
+    transport_energy_recycled: 1.860280113
+  Product manufacturing, from HDPE, using 100% virgin inputs:
+    C2F6_non_energy_virgin: 0.0
+    CF4_non_energy_virgin: 0.0
+    CH4_non_energy_virgin: 0.0055610424562
+    CO2_non_energy_virgin: 0.06005562978800001
+    distance_to_retailer: 497.0
+    energy_content: 39.97
+    N2O_non_energy_virgin: 0.0
+    precombustion_energy: 0.15333838367361
+    process_energy_virgin: 23.5853845223078
+    transport_energy_virgin: 2.74074186750654
+  Product manufacturing, from PET, using 100% recycled inputs:
+    C2F6_non_energy_recycled: 0.0
+    CF4_non_energy_recycled: 0.0
+    CH4_non_energy_recycled: 0.0
+    CO2_non_energy_recycled: 0.0
+    distance_to_retailer: 497.0
+    N2O_non_energy_recycled: 0.0
+    precombustion_energy: 0.0
+    process_energy_recycled: 12.00186135
+    transport_energy_recycled: 1.548386642
+  Product manufacturing, from PET, using 100% virgin inputs:
+    C2F6_non_energy_virgin: 0.0
+    CF4_non_energy_virgin: 0.0
+    CH4_non_energy_virgin: 0.004762719885
+    CO2_non_energy_virgin: 0.26671231355999997
+    distance_to_retailer: 497.0
+    energy_content: 21.2
+    N2O_non_energy_virgin: 0.0
+    precombustion_energy: 0.336552407672511
+    process_energy_virgin: 28.0554502007701
+    transport_energy_virgin: 1.00136041819322
+  Residual oil, consumption:
+    pre_combustion_scale_up_factor_residual_oil: 1.172
+  Transport of manufactured products, to retailer:
+    percentage_rail: 0.44511194800922743
+    percentage_truck: 0.38086542441317894
+    percentage_water: 0.06275209614461214
+  Transport, by ship:
+    percentage_distillate_in_water_transport: 0.5
+    percentage_residual_oil_in_water_transport: 0.5
+    water_fuel_consumption: 0.001
+  Transport, by train:
+    rail_fuel_consumption: 0.0031
+  Transport, by truck:
+    truck_fuel_consumption: 0.013383231
+  Transport, in product manufacturing from HDPE, using 100% recycled inputs:
+    CH4_transport_recycled: 2.0506e-05
+    CO2_transport_recycled: 0.073316678
+  Transport, in product manufacturing from HDPE, using 100% virgin inputs:
+    CH4_transport_virgin: 0.0001155603423555
+    CO2_transport_virgin: 0.0531272815601241
+  Transport, in product manufacturing from PET, using 100% recycled inputs:
+    CH4_transport_recycled: 2.03117e-05
+    CO2_transport_recycled: 0.073303031
+  Transport, in product manufacturing from PET, using 100% virgin inputs:
+    CH4_transport_virgin: 3.07202799513e-05
+    CO2_transport_virgin: 0.0709903907195128
