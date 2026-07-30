@@ -28,8 +28,10 @@ model_defaults:
     amount: 907.18474  # one US short ton
     unit: kilogram
 
-# global_parameter_overrides:
-#   transport_distance_landfilling: XX
+global_parameter_overrides:
+  transport_distance_landfilling: 20
+  transport_distance_combustion: 20
+  transport_distance_recycling: 20
 
 # process_parameter_overrides:
 #   "MSW recycling of PET":
