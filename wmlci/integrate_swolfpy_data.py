@@ -193,32 +193,50 @@ json_ld.data["flows"].update({
 
 # %%write zip 
 
+
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
-root = Path("olca_export")
-root.mkdir(exist_ok=True)
+export_dir = PATH_PROJECT / "data/source_data/swolfpy"
+temp_root = export_dir / "_warm_plus_swolfpy_temp"
+zip_path = export_dir / "warm_plus_swolfpy.zip"
 
-for entity_type, entities in json_ld.data.items():
+# Clean up any previous temp folder
+if temp_root.exists():
+    shutil.rmtree(temp_root)
 
-    folder = root / entity_type
-    folder.mkdir(exist_ok=True)
+temp_root.mkdir(parents=True, exist_ok=True)
+print(f"temp_root = {temp_root.resolve()}")
+try:
+    # Build JSON folder structure in temporary location
+    for entity_type, entities in json_ld.data.items():
 
-    for obj in entities.values():
+        folder = temp_root / entity_type
+        folder.mkdir(parents=True, exist_ok=True)
 
-        filename = Path(obj["filename"]).name
+        for obj in entities.values():
 
-        target = folder / filename
+            filename = Path(obj["filename"]).name
+            target = folder / filename
 
-        with open(target, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
+            with open(target, "w", encoding="utf-8") as f:
+                json.dump(obj, f, ensure_ascii=False, indent=2)
 
-n = len(list(root.rglob("*.json")))
-print(f"Wrote {n} json files")
+    n = len(list(temp_root.rglob("*.json")))
+    print(f"Wrote {n} json files")
 
-with zipfile.ZipFile("olca_export.zip", "w", zipfile.ZIP_DEFLATED) as zf:
-    for file in root.rglob("*.json"):
-        zf.write(file, file.relative_to(root))
+    # Create ZIP in desired location
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file in temp_root.rglob("*.json"):
+            zf.write(file, file.relative_to(temp_root))
 
-print("Created olca_export.zip")
+    print(f"Export successful: {zip_path}")
+
+finally:
+    # Remove temporary unzipped files
+    if temp_root.exists():
+        shutil.rmtree(temp_root)
+        
+print(temp_root.exists())

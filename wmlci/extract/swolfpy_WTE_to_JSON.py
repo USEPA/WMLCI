@@ -35,27 +35,36 @@ with open(METHODS_PATH / "v16.yaml" , "r") as f:
 import pandas as pd
 from swolfpy_processmodels import WTE
 
-print(config['model_defaults']['functional_unit']['amount'])
-
 # --------------------------------------------------
 # Create and run model
 # --------------------------------------------------
 
 
 wte = WTE()
+# %%
+
 
 print(dir(wte))
 print("Running WTE...")
 print(type(wte.InputData))
 print(wte.InputData.__dict__.keys())
 
+#check parameter default values
+print(wte.InputData.Material_Consumption["ammonia"]["amount"])
+print(wte.InputData.Material_Consumption["lime"]["amount"])
+print(wte.InputData.Material_Consumption["carbon"]["amount"])
+print(wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"])
+inputdata_table = wte.InputData.Material_Consumption
+
+# %%
 #change transport distance, with mi to km conversion
-wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = config['model_defaults']['transport']['distance_miles'] * 1.60934
+#wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = config['model_defaults']['transport']['distance_miles'] * 1.60934
+
+#run wte module-- this gets results, but we're extracting exchanges 
 wte.calc()
 print("Complete")
 
 # %%
-
 
 # --------------------------------------------------
 # Check available material names
@@ -106,7 +115,6 @@ apc = wte.APC_Consumption.loc[[material]]
 
 print("\n=== APC CONSUMPTION ===")
 print(apc.T)
-
 # --------------------------------------------------
 # Build reported inventory
 # --------------------------------------------------
@@ -138,7 +146,7 @@ schema = [
     "unit",
     "avoided_product",
     "exchange_dqi",
-    "location",
+    "location"
 ]
 # %% match uuids to flow names
 # ------------------------------------------------------------------
@@ -266,7 +274,7 @@ bios_to_fedefl_map = {
     "5ce378a0-b48d-471c-977d-79681521efde" : ('Zinc', '435bfa52-d2d3-3760-abf4-27de892972ac'),
 }
 
-# %%
+# %% 
     
 
 # ------------------------------------------------------------------
@@ -332,23 +340,25 @@ def add_exchange(
             "location": LOCATION,
         }
     )
+# %% mixed plastic input flow
+
 
 # ------------------------------------------------------------------
-# Reference flow
+# MSW input flow-- reference set to false is important for later steps
 # ------------------------------------------------------------------
 
 add_exchange(
     flow_name="Mixed Plastic",
-    amount=1,
-    unit="sh tn",
+    amount=907.185,
+    unit="kg",
     flow_type="PRODUCT_FLOW",
     is_input=True,
     provider_name='',
     provider_uuid='',
-    reference=True,
+    reference=False,
 )
 
-# %%
+# %% technosphere exchanges
 
 # ------------------------------------------------------------------
 # Technosphere exchanges
@@ -443,7 +453,7 @@ for flow, amount in wte.WTE["Technosphere"][material].items():
             context=PROCESS_CATEGORY,
         )
         
-# %%
+# %% waste exchanges
         
 # ------------------------------------------------------------------
 # Waste outputs
@@ -564,7 +574,7 @@ for flow_name, flow_uuid in biosphere_uuid_by_name.items():
 
 
 
-# %%
+# %% build df_olca
 
 
 # ------------------------------------------------------------------
@@ -581,7 +591,7 @@ df_olca = df_olca[schema]
 
 # %% addtional unit conversion to kg/Mg basis
 
-exceptions = ['Ammonia','Charcoal','lime','Transport','Electricity','Plastic']
+exceptions = ['Ammonia','Granular','Quicklime','Transport','Electricity','Plastic']
 pattern = '|'.join(exceptions)
 
 mask = df_olca['FlowName'].str.contains(pattern, case=False, regex=True)
@@ -589,13 +599,13 @@ mask = df_olca['FlowName'].str.contains(pattern, case=False, regex=True)
 df_olca.loc[~mask, 'amount'] = df_olca.loc[~mask, 'amount'] * 1000
 
 
-# %% convert all exchanges up to sh ton basis 
+# %% convert all exchanges down to 1 sh ton basis 
 
-ref_mask = df_olca['reference']
-#df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * 1.10231
-df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1000 / config['model_defaults']['functional_unit']['amount'])
+ref_mask = df_olca['FlowName'].str.contains('Plastic', case=False, regex=False)
+df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1/ 1.10231)
+#df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1000 / config['model_defaults']['functional_unit']['amount'])
 
-# %%
+# %% assign uuids, plus extra checks
 
 
 # ------------------------------------------------------------------
@@ -653,9 +663,7 @@ print(
 )
 
 print(df_olca.groupby('IsInput')['amount'].sum())
-# %%
-
-
+# %% optional export
 
 # # ------------------------------------------------------------------
 # # Optional export
@@ -668,6 +676,82 @@ print(df_olca.groupby('IsInput')['amount'].sum())
 
 # print("\nExported mixed_plastic_wte_olca_inventory.csv")
 
+# %%parameter df 
+
+df_params = pd.DataFrame({"formula": ['',
+                                      '',
+                                      '',
+                                      '',
+                                      '',
+                                      '(ammonia*transport_distance_combustion+lime*transport_distance_combustion+carbon*transport_distance_combustion)*Mg_to_shtn',
+                                      '(3*emptyReturn/23)*Mg_to_shtn',
+                                      ''],
+                          
+                         "isInputParameter": ['True',
+                                              'True',
+                                              'True',
+                                              'True',
+                                              'True',
+                                              'False',
+                                              'False',
+                                              'True'],
+                         "name": ['ammonia',
+                                  'lime',
+                                  'transport_distance_combustion',
+                                  'carbon',
+                                  'emptyReturn',
+                                  'transport_tkm',
+                                  'backhaul_tkm',
+                                  'Mg_to_shtn'],
+                         "value":[0.0004,
+                                  0.012,
+                                  100,
+                                  0.0006,
+                                  1,
+                                  '',
+                                  '',
+                                  0.907185],
+                         "description": ['Mg ammonia/Mg MSW',
+                                         'Mg lime/ Mg MSW',
+                                         'User-defined transport distance',
+                                         'Mg carbon/ Mg MSW',
+                                         'Backhaul toggle (0 = no backhaul, 1 = backhaul)',
+                                         'Calculated transport exchange amount in t*km',
+                                         'Calculated backhaul exchange amount in t*km. 23 is the heavy duty truck payload.',
+                                         'Conversion factor, Mg to short ton'],
+                         "processName":['Mixed Plastic WTE',
+                                        'Mixed Plastic WTE','Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE']})
+
+
+# %%
+
+def assign_formulas(df, flow_name, formula1, formula2):
+    mask = df["FlowName"].str.contains(
+        flow_name,
+        case=False,
+        regex=False,
+        na=False
+    )
+
+    idx = df.index[mask]
+
+    if len(idx) >= 2:
+        df.loc[idx[0], "amountFormula"] = formula1
+        df.loc[idx[1], "amountFormula"] = formula2
+
+    return df
+
+df_test = assign_formulas(
+    df_olca,
+    "Transport",
+    "transport_tkm",
+    "backhaul_tkm"
+)
 # %%
 
 # validate_exchange_data(df_olca)
@@ -680,7 +764,6 @@ location_objs = {}
 source_objs={}
 actor_objs={}
 dq_objs={}
-df_params={}
 
 id_to_name = df_olca.set_index("ProcessName")["ProcessID"].to_dict()
 processes = {}
@@ -696,7 +779,7 @@ for process_name in id_to_name.keys():
         location_objs = {},
         source_objs={},
         actor_objs={},
-        dq_objs={}, df_params={}
+        dq_objs={}, df_params=df_params
     )
     processes.update(p_dict)
 # %%
@@ -722,7 +805,6 @@ def _write_obj(
             W.write(x)
 
 # %%
-
 
 def write_objects(name: str,
                   flows: dict[str, olca.Flow],
