@@ -21,15 +21,28 @@ from wmlci.log import log
 # Import WARM v16 JSON file
 json_ld = load_JSONLD_sourceData('waste_reduction_model_v16', datatype="jsonld", bw_database_name='db')
 
+
+# %%
+
+
 # swolfpy data paths
 PATH_PROJECT = Path.cwd()
 swolfpy_path = PATH_PROJECT / "data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
 unzip_to_folder = (
     PATH_PROJECT
-    / "wmlci/data/source_data/swolfpy"
+    / "/data/source_data/swolfpy"
     / "SwolfPy_WTE_PW_JSON_olca2.0_20260717-114500"
 )
 
+print("cwd =", Path.cwd())
+
+print("PATH_PROJECT =", PATH_PROJECT)
+
+swolfpy_path = PATH_PROJECT / "data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
+
+print("swolfpy_path =", swolfpy_path)
+
+print(unzip_to_folder)
 # %%
 
 
@@ -42,6 +55,8 @@ with zipfile.ZipFile(swolfpy_path, "r") as zip_ref:
 # Extract swolfpy data into JSONLDImporter
 swolfpy_path = unzip_to_folder
 swolfpy = JSONLDImporter(swolfpy_path, 'db')
+# %%
+
 
 ## Methods
 
@@ -190,6 +205,25 @@ json_ld.data["flows"].update({
     if k not in json_ld.data["flows"]
 })
 
+# %% combine parameters, process specific 
+
+swolf_uuid = "16c78919-ec73-3993-9c02-66a76ef78bf7"
+warm_uuid = "e847ff05-48e3-4df0-ae4d-db2bafe56baf"
+
+swolf_proc = swolfpy.data["processes"][swolf_uuid]
+warm_proc = json_ld.data["processes"][warm_uuid]
+
+swolf_params = swolf_proc.get("parameters", [])
+warm_params = warm_proc.get("parameters", [])
+
+print("SwolfPy params:", len(swolf_params))
+print("WARM params before:", len(warm_params))
+
+warm_proc["parameters"] = warm_params + swolf_params
+
+json_ld.data["processes"][warm_uuid] = warm_proc
+
+print("WARM params after:", len(json_ld.data["processes"][warm_uuid].get("parameters", [])))
 
 # %%write zip 
 
