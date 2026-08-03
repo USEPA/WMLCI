@@ -1,12 +1,28 @@
+# Replace Product manufacturing with FLCAC USLCI resin/pellet datasets
+# Drop Transport of MSW, by truck — collection is already in recycled FLCAC datasets
+# TODO: determine if transport to retailer (pellets) is dropped in new approach
+
 technosphere_exchanges:
-  "Transport of MSW, by truck":
+  "Product manufacturing, from PET, using 100% virgin inputs":
     data_source: uslci
     data_version: 1.2026-06.0
-    product: "Transport; single unit truck, short-haul; diesel powered"
-    process: "Transport, single unit truck; short-haul; diesel powered"
+    product: "Polyethylene terephthalate, PET; virgin resin; at plant"
+    process: "Polyethylene terephthalate, PET; virgin resin; at plant"
+  "Product manufacturing, from HDPE, using 100% virgin inputs":
+    data_source: uslci
+    data_version: 1.2026-06.0
+    product: "High density polyethylene, HDPE; virgin resin; at plant"
+    process: "High density polyethylene, HDPE; virgin resin; at plant"
+  "Product manufacturing, from PET, using 100% recycled inputs":
+    data_source: uslci
+    data_version: 1.2026-06.0
+    product: "Recycled postconsumer polyethylene teraphthalate, rPET; pellet"  # terephthalate is misspelled in USLCI data
+    process: "Recycled postconsumer polyethylene terephthalate, PET, pellet; at plant"
+  "Product manufacturing, from HDPE, using 100% recycled inputs":
+    data_source: uslci
+    data_version: 1.2026-06.0
+    product: "Recycled postconsumer high-density polyethylene, HDPE; pellet"
+    process: "Recycled postconsumer high-density polyethylene, HDPE, pellet; at plant"
 
-# technosphere_exchange_drops:
-#   - "Transport, in product manufacturing from PET, using 100% recycled inputs"
-#   - "Transport, in product manufacturing from HDPE, using 100% recycled inputs"
-#   - "Transport, in product manufacturing from PET, using 100% virgin inputs"
-#   - "Transport, in product manufacturing from HDPE, using 100% virgin inputs"
+technosphere_exchange_drops:
+  - "Transport of MSW, by truck"
