@@ -176,10 +176,6 @@ def _normalize_exchange_unit(exc: dict, data: dict) -> None:
         if full is not None:
             full["refUnit"] = cur
         exc["flow"] = embed
-    if cur != from_u or abs(amount - old_amount) > abs(old_amount) * 1e-12:
-        log.info(
-            f"Normalized '{embed.get('name')}': {old_amount} {from_u} -> {amount} {cur}"
-        )
 
 
 ######################################################
