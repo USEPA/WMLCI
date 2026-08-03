@@ -27,6 +27,160 @@ _CLEANED_SOURCE_CACHE = {}
 # Processes keyed by name, after formula amounts are recalculated.
 _PROCESSES_BY_NAME_CACHE = {}
 
+# WARM and USLCI transport sit in different openLCA unit groups, so hard code conversions
+_EXTRA = {
+    ("sh tn*mi", "t*km"): 0.90718474 * 1.609344,
+    ("t*km", "sh tn*mi"): 1.0 / (0.90718474 * 1.609344),
+}
+
+
+def convert_amount(
+    amount: float,
+    from_unit: str | None,
+    to_unit: str | None,
+    *,
+    flow: dict | None = None,
+    datasets: tuple[dict, ...] = (),
+) -> float:
+    """Rescale ``amount`` between units.
+
+    Uses openLCA unit-group ``conversionFactor``s when both units share an
+    ``isRefUnit``, a 2-entry table for WARM↔USLCI transport, and flow
+    ``flowProperties`` for cross-dimension cases (e.g. diesel btu → m3).
+    Unit names are case-sensitive (Mg ≠ mg).
+    """
+    a, b = (from_unit or "").strip(), (to_unit or "").strip()
+    if not a or not b:
+        raise ValueError(f"Missing unit: {from_unit!r} -> {to_unit!r}")
+    if a == b:
+        return float(amount)
+    if (a, b) in _EXTRA:
+        return float(amount) * _EXTRA[(a, b)]
+
+    def _factor(unit: str):
+        """Return (conversionFactor, isRefUnit name) for ``unit``, or None."""
+        for data in datasets:
+            for ug in (data.get("unit_groups") or {}).values():
+                units = ug.get("units") or []
+                match = next((u for u in units if (u.get("name") or "").strip() == unit), None)
+                ref = next((u.get("name") for u in units if u.get("isRefUnit")), None)
+                if match is not None and ref and match.get("conversionFactor") is not None:
+                    return float(match["conversionFactor"]), ref
+        return None
+
+    fa, fb = _factor(a), _factor(b)
+    if fa and fb and fa[1] == fb[1]:
+        return float(amount) * (fa[0] / fb[0])
+
+    # Cross-dimension via flow Mass / Energy / Volume densities
+    if flow:
+        props = {
+            (fp.get("flowProperty") or {}).get("name"): fp
+            for fp in (flow.get("flowProperties") or [])
+            if (fp.get("flowProperty") or {}).get("name")
+        }
+
+        def _prop(unit: str):
+            info = _factor(unit)
+            if not info:
+                return None
+            name = {"MJ": "Energy", "kg": "Mass", "m3": "Volume"}.get(info[1])
+            fp = props.get(name) if name else None
+            return (name, fp) if fp else None
+
+        p0, p1 = _prop(a), _prop(b)
+        if p0 and p1 and p0[0] != p1[0]:
+            fp0, fp1 = p0[1], p1[1]
+            r0 = (fp0.get("flowProperty") or {}).get("refUnit")
+            r1 = (fp1.get("flowProperty") or {}).get("refUnit")
+            out = float(amount)
+            if a != (r0 or "").strip():
+                out = convert_amount(out, a, r0, datasets=datasets)
+            out = out / float(fp0["conversionFactor"]) * float(fp1["conversionFactor"])
+            if b != (r1 or "").strip():
+                out = convert_amount(out, r1, b, datasets=datasets)
+            return out
+
+    raise ValueError(f"No conversion from {a!r} to {b!r}")
+
+
+def _normalize_exchange_unit(exc: dict, data: dict) -> None:
+    """Fold exchange onto flow ref-property + group ``isRefUnit`` for Brightway.
+
+    Brightway does ``amount *= unit.conversionFactor`` then labels with
+    ``flow.refUnit``, so the exchange unit must already be the group reference.
+    Prefer ``data``'s unit ``@id`` by name (target inventory after merge).
+    """
+    unit = exc.get("unit")
+    if not isinstance(unit, dict) or not unit.get("name"):
+        return
+
+    def _lookup(name: str):
+        want = (name or "").strip()
+        for ug in (data.get("unit_groups") or {}).values():
+            for u in ug.get("units") or []:
+                if (u.get("name") or "").strip() == want:
+                    return ug, u
+        return None, None
+
+    from_u = unit["name"]
+    embed = exc.get("flow") or {}
+    flow = (data.get("flows") or {}).get(embed.get("@id")) or embed
+    old_amount = float(exc.get("amount") or 0)
+    amount = old_amount
+    cur = from_u
+
+    prop_ref = None
+    for fp in flow.get("flowProperties") or []:
+        if fp.get("isRefFlowProperty"):
+            prop_ref = (fp.get("flowProperty") or {}).get("refUnit")
+            if prop_ref:
+                prop_ref = str(prop_ref).strip()
+                break
+    if not prop_ref and flow.get("refUnit"):
+        prop_ref = str(flow["refUnit"]).strip()
+
+    # Onto flow reference-property unit when possible (diesel btu/kg → m3)
+    if prop_ref and prop_ref != cur:
+        try:
+            amount = convert_amount(amount, cur, prop_ref, flow=flow, datasets=(data,))
+            cur = prop_ref
+        except ValueError as err:
+            log.warning(f"Unit prop-ref skip '{embed.get('name')}': {err}")
+
+    # Fold to group isRefUnit (MWh → MJ, Mg → kg, …)
+    ug, _ = _lookup(cur)
+    ref = next((u.get("name") for u in (ug or {}).get("units") or [] if u.get("isRefUnit")), None)
+    if ref and ref != cur:
+        try:
+            amount = convert_amount(amount, cur, ref, datasets=(data,))
+            cur = ref
+        except ValueError as err:
+            log.warning(f"Unit group-ref skip '{embed.get('name')}': {err}")
+            return
+
+    prop_ug, _ = _lookup(prop_ref) if prop_ref else (None, None)
+    cur_ug, cur_u = _lookup(cur)
+    update_flow_ref = prop_ug is None or cur_ug is prop_ug
+
+    if cur_u is not None:
+        exc["unit"] = {"@type": "Unit", "@id": cur_u["@id"], "name": cur_u["name"]}
+    if amount != old_amount:
+        scale = amount / old_amount if old_amount != 0 else 1.0
+        exc["amount"] = amount
+        if exc.get("amountFormula") and scale != 1.0:
+            exc["amountFormula"] = f"({exc['amountFormula']}) * {scale}"
+    if update_flow_ref and cur:
+        embed["refUnit"] = cur
+        full = (data.get("flows") or {}).get(embed.get("@id"))
+        if full is not None:
+            full["refUnit"] = cur
+        exc["flow"] = embed
+    if cur != from_u or abs(amount - old_amount) > abs(old_amount) * 1e-12:
+        log.info(
+            f"Normalized '{embed.get('name')}': {old_amount} {from_u} -> {amount} {cur}"
+        )
+
 
 ######################################################
 ### Load YAML and source process lists             ###
@@ -375,8 +529,9 @@ def copy_process_and_its_providers(target_importer, source_importer, process_id)
 
         target_processes[pid] = deepcopy(process)
         merged += 1
+        copied = target_processes[pid]
 
-        loc = process.get("location")
+        loc = copied.get("location")
         if isinstance(loc, dict) and loc.get("@id"):
             location_id = loc["@id"]
             locations = target_data.setdefault("locations", {})
@@ -385,12 +540,19 @@ def copy_process_and_its_providers(target_importer, source_importer, process_id)
                 if source_location:
                     locations[location_id] = deepcopy(source_location)
 
-        for exc in process.get("exchanges", []):
+        for exc in copied.get("exchanges", []):
             _copy_flow_location_and_unit_for_exchange(
                 target_data, source_data, exc, copied_flow_ids
             )
             if _exchange_is_input(exc) and exc.get("defaultProvider"):
                 copy_process(exc["defaultProvider"]["@id"])
+
+        # Convert cross-dimension units now that flows/unit_groups are in target
+        for exc in copied.get("exchanges", []):
+            _normalize_exchange_unit(exc, target_data)
+            unit = exc.get("unit")
+            if isinstance(unit, dict) and unit.get("@id"):
+                _copy_unit_groups(target_data, source_data, unit_id=unit["@id"])
 
     copy_process(process_id)
 
@@ -571,14 +733,18 @@ def replace_input_provider(
             index["source"].data.get("processes", {}).get(replacement["process_id"], {})
         )
         new_unit = production["unit"]
-        factors = {}
-        for data in (importer.data, index["source"].data):
-            for ug in (data.get("unit_groups") or {}).values():
-                for unit in ug.get("units") or []:
-                    if unit.get("@id") is not None and unit.get("conversionFactor") is not None:
-                        factors[unit["@id"]] = float(unit["conversionFactor"])
-        scale = factors[old_unit["@id"]] / factors[new_unit["@id"]]
-        exchange["amount"] = float(old_amount) * scale
+        old_name = old_unit.get("name")
+        new_name = new_unit.get("name")
+        exchange["amount"] = convert_amount(
+            float(old_amount),
+            old_name,
+            new_name,
+            flow=flow,
+            datasets=(importer.data, index["source"].data),
+        )
+        scale = (
+            exchange["amount"] / float(old_amount) if float(old_amount) != 0 else 1.0
+        )
         exchange["unit"] = deepcopy(new_unit)
         if exchange.get("amountFormula") and scale != 1.0:
             exchange["amountFormula"] = f"({exchange['amountFormula']}) * {scale}"
