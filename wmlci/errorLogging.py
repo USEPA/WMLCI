@@ -2,40 +2,16 @@
 Functions for locating where incompatibilities exist between olca json-ld and brightway.
 """
 
-import pandas as pd
-from collections import defaultdict
 import os
-import hashlib
-from typing import Optional, List
-import openpyxl
-from openpyxl.utils.dataframe import dataframe_to_rows
-import zipfile
+from collections import defaultdict
 
-from bw2calc import LCA, LeastSquaresLCA
-from bw2io.importers.json_ld import JSONLDImporter
 import bw2data as bd
+import openpyxl
+import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
 
-from wmlci.settings import paths, error_logs_path
 from wmlci.log import log
-
-from esupy.remote import make_url_request
-from esupy.util import make_uuid
-from esupy.processed_data_mgmt import download_from_remote, Paths, mkdir_if_missing
-
-def print_avoided_input_uuids(jsonld):
-    """
-    Prints the UUIDs of processes and exchanges where avoided products are used as inputs.
-
-    Parameters:
-        jsonld (JSONLDImporter): An initialized JSONLDImporter object with data loaded.
-    """
-    log.info("\nChecking for avoided products used as inputs...\n")
-    for pid, process in jsonld.data.get("processes", {}).items():
-        if process.get("isInput"):
-            for exc in process.get("exchanges", []):
-                if exc.get("isAvoidedProduct"):
-                    log.info(f" Process UUID: {pid} -> Exchange UUID: {exc.get('id')}")
-    log.info("\nScan complete.")
+from wmlci.settings import error_logs_path
 
 
 def find_missing_unit_group_id(jsonld):
@@ -62,7 +38,7 @@ def find_production_exchange_errors(jsonld):
     print process and exchange info for missing unit group id
     this is a debugging function that should help find causes of the 'Failed Allocation' assertion error
 
-    running drop_non_reference_product_outputs() and apply_opposite_direction_approach()
+    running split_multi_product_processes() and apply_opposite_direction_approach()
     should result in this method producing no outputs
 
     :param jsonld:
@@ -85,8 +61,6 @@ def find_production_exchange_errors(jsonld):
                 is_input = exc.get("isInput")
                 log.info(f"  - Flow: {flow_name}, isInput: {is_input}")
             log.info("-" * 60)
-        else:
-            process["unit"] = production_exchanges[0]["unit"]
     return log.info("\nSearch for production exchange issues is complete.")
 
 
@@ -501,172 +475,6 @@ def check_default_providers(importer, output_path, debug=False):
 
     write_provider_errors(error_dicts, output_path)
 
-##############################################
-## Methods for working with unlinked edges ###
-##############################################
-
-def clean_all_locations(jsonld):
-    """
-    Clean and standardize 'location' fields in a JSONLDImporter object.
-
-    This function addresses a specific issue encountered when exporting data to Excel
-    using the `xlsxwriter` library, where a `TypeError: unhashable type: 'dict'` occurs.
-    The root cause of this error is that some entries in the dataset contain a 'location'
-    field that is either:
-        - A dictionary (which is unhashable and cannot be used in Excel shared string tables),
-        - `None`, or
-        - Missing entirely.
-
-    These invalid 'location' values are passed to `sheet.write_string()` in the
-    `write_lci_matching()` function, which expects a string. When a non-string value
-    (dict or NoneType) is passed, `xlsxwriter` fails when trying to store it in its
-    internal shared string table.
-
-    This function resolves the issue by:
-        - Iterating over all entries in `uslci.data` and `uslci.products`,
-        - Checking each dictionary for the presence and type of the 'location' field,
-        - Replacing any non-string, missing, or None 'location' values with the string
-          "no location",
-        - Recursively checking all nested 'exchanges' within each dataset entry,
-        - Logging each fix with the process ID and original value for traceability.
-
-    Parameters
-    ----------
-    uslci : JSONLDImporter
-        An instance of the JSONLDImporter class containing `.data` and `.products`
-        attributes, each of which is a list of dictionaries representing LCI data.
-
-    Returns
-    -------
-    None
-        The function modifies the `uslci` object in-place and prints a summary of
-        the changes made.
-    """
-    count_fixed = 0
-    def clean_entry(entry, context=""):
-        nonlocal count_fixed
-        location = entry.get("location")
-        if location is None or not isinstance(location, str):
-            process_id = entry.get("id") or entry.get("code") or "(unknown ID)"
-            #print(f"[{context}] FIXING Process ID: {process_id}")
-            #print(f"Original location type: {type(location).__name__}")
-            #print(f"Original location content: {location}")
-            #print("-" * 40)
-            entry["location"] = "no location"
-            count_fixed += 1
-
-    for entry in jsonld.data:
-        clean_entry(entry, "DATA")
-        for exc in entry.get("exchanges", []):
-            clean_entry(exc, "EXCHANGE")
-
-    for product in jsonld.products:
-        clean_entry(product, "PRODUCT")
-
-    log.info(f"Total entries' location fixed: {count_fixed}")
-
-
-def write_unlinked_flows_to_excel(importer, output_directory):
-    """
-    Identify and export unlinked flows from a Brightway25 JSONLDImporter object to an Excel file.
-
-    This function:
-    - Identifies unlinked exchanges using Brightway's logic.
-    - Uses `activity_hash()` to ensure consistent uniqueness with Brightway's internal statistics.
-    - Tracks and exports:
-        1. Unique unlinked exchanges.
-        2. Processes that contain unlinked exchanges.
-        3. Unique processes with at least one unlinked exchange.
-
-    Parameters:
-    ----------
-    importer : JSONLDImporter
-        A Brightway25 importer object containing `.data` with datasets and exchanges.
-    output_directory : str
-        Path to the directory where the Excel file will be saved.
-
-    Output:
-    -------
-    An Excel file named `unlinked_flows.xlsx` with three sheets:
-        - "unique_unlinked_exc"
-        - "process_with_unlinked_exc"
-        - "unique_process_unlinked_exc"
-    """
-    # Define activity_hash inline (or import from bw2data.utils if available)
-    def activity_hash(data: dict, fields: Optional[List[str]] = None, case_insensitive: bool = True) -> str:
-        default_fields = ["name", "unit", "location", "type", "categories", "code"]
-        lower = lambda x: x.lower() if case_insensitive and isinstance(x, str) else str(x)
-
-        def get_value(obj, field):
-            value = obj.get(field)
-            if isinstance(value, (list, tuple)):
-                return lower("".join(map(str, value)))
-            return lower(value or "")
-
-        fields = fields or default_fields
-        string = "".join([get_value(data, field) for field in fields])
-        return hashlib.md5(string.encode("utf-8")).hexdigest()
-
-    # Prepare containers
-    unique_unlinked_set = set()
-    unique_unlinked_data = []
-    process_with_unlinked = []
-    unique_process_set = set()
-    unique_process_data = []
-
-    for ds in importer.data:
-        ds_type = ds.get("type")
-        ds_code = ds.get("code", "No code")
-        ds_name = ds.get("name", "No name")
-
-        has_unlinked = False
-
-        for exc in ds.get("exchanges", []):
-            if not exc.get("isInput") and not (ds_type == "multifunctional" and exc.get("functional")):
-                exc_hash = activity_hash(exc)
-
-                # Use hash to determine uniqueness
-                if exc_hash not in unique_unlinked_set:
-                    unique_unlinked_set.add(exc_hash)
-                    unique_unlinked_data.append({
-                        "hash": exc_hash,
-                        "type": exc.get("type", "unknown"),
-                        "code": exc.get("code", "No code"),
-                        "name": exc.get("name", "No name"),
-                        "unit": exc.get("unit", ""),
-                        "location": exc.get("location", ""),
-                        "categories": exc.get("categories", "")
-                    })
-
-                process_with_unlinked.append({
-                    "process_code": ds_code,
-                    "process_name": ds_name,
-                    "unlinked_exchange_code": exc.get("code", "No code")
-                })
-
-                has_unlinked = True
-
-        if has_unlinked and ds_code not in unique_process_set:
-            unique_process_set.add(ds_code)
-            unique_process_data.append({
-                "code": ds_code,
-                "name": ds_name
-            })
-
-    # Create DataFrames
-    df_unique_unlinked = pd.DataFrame(unique_unlinked_data)
-    df_process_with_unlinked = pd.DataFrame(process_with_unlinked)
-    df_unique_process_unlinked = pd.DataFrame(unique_process_data)
-
-    # Write to Excel
-    output_path = os.path.join(output_directory, "unlinked_flows.xlsx")
-    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-        df_unique_unlinked.to_excel(writer, sheet_name="unique_unlinked_exc", index=False)
-        df_process_with_unlinked.to_excel(writer, sheet_name="process_with_unlinked_exc", index=False)
-        df_unique_process_unlinked.to_excel(writer, sheet_name="unique_process_unlinked_exc", index=False)
-
-    log.info(f"Excel file saved to: {output_path}")
-
 
 def check_for_errors_in_jsonld_import(jsonld):
     """
@@ -674,7 +482,6 @@ def check_for_errors_in_jsonld_import(jsonld):
     :param jsonld:
     :return:
     """
-    print_avoided_input_uuids(jsonld)
     find_missing_unit_group_id(jsonld)  # todo: confirm working as intended
     find_production_exchange_errors(jsonld)
     find_location_issues(jsonld)

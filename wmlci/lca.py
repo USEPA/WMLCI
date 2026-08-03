@@ -58,14 +58,11 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     )
     # split multi-product processes so the technosphere matrix is square
     jsonld = split_multi_product_processes(jsonld)
-    # check for errors in imported data - these checks do not fix the errors
-    check_for_errors_in_jsonld_import(jsonld)
     # apply common clean up procedures
     jsonld = clean_JSONLD_sourceData(jsonld, config)
     # replace input providers using technosphere_updates YAML
     jsonld = update_technosphere_flows(jsonld, config["processes"], config)
-    # check for errors again
-    log.info("Checking errors are fixed")
+    # diagnostics only — these checks do not fix errors
     check_for_errors_in_jsonld_import(jsonld)
     # keep duplicative input/isInput keys because
     # json_ld_allocate_datasets uses input, while json_ld_add_activity_unit uses isInput
