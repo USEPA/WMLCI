@@ -384,24 +384,33 @@ def clone_shared_production_flows(jsonld):
     """
     Ensure each process has a unique production product flow.
 
-    Background datasets ( electricity / transport) often reuse one product-flow
+    Background datasets (electricity / transport) often reuse one product-flow
     UUID across many regional processes. Brightway then builds a non-square
-    technosphere matrix with more process columns than product rows. Clone the product
-    flow per colliding producer and retarget that producer's consumers.
+    technosphere matrix with more process columns than product rows. Clone the
+    product flow per colliding producer and retarget that producer's consumers.
+
+    Consumers are indexed by (provider_id, flow_id) once so retargeting is
+    O(exchanges) instead of rescanning the whole database per clone.
     """
     processes = jsonld.data.get("processes", {})
     flows = jsonld.data.setdefault("flows", {})
 
     producers = defaultdict(list)
+    consumers_by_provider_flow = defaultdict(list)
     for pid, process in processes.items():
         for exc in process.get("exchanges") or []:
-            if _exchange_is_input(exc) or exc.get("avoidedProduct"):
-                continue
             flow = exc.get("flow") or {}
-            if flow.get("flowType") != "PRODUCT_FLOW":
-                continue
             flow_id = flow.get("@id")
-            if flow_id:
+            if not flow_id:
+                continue
+            if _exchange_is_input(exc):
+                provider_id = (exc.get("defaultProvider") or {}).get("@id")
+                if provider_id and flow.get("flowType") == "PRODUCT_FLOW":
+                    consumers_by_provider_flow[(provider_id, flow_id)].append(exc)
+                continue
+            if exc.get("avoidedProduct"):
+                continue
+            if flow.get("flowType") == "PRODUCT_FLOW":
                 producers[flow_id].append((pid, exc))
 
     n_cloned = 0
@@ -418,19 +427,9 @@ def clone_shared_production_flows(jsonld):
             flows[new_id] = new_flow
             production_exc["flow"] = deepcopy(new_flow)
             n_cloned += 1
-            # Retarget consumers of this producer that still point at the old flow.
-            for process in processes.values():
-                for exc in process.get("exchanges") or []:
-                    if not _exchange_is_input(exc):
-                        continue
-                    provider = exc.get("defaultProvider") or {}
-                    exc_flow = exc.get("flow") or {}
-                    if (
-                        provider.get("@id") == pid
-                        and exc_flow.get("@id") == flow_id
-                    ):
-                        exc["flow"] = deepcopy(new_flow)
-                        n_retargeted += 1
+            for exc in consumers_by_provider_flow.get((pid, flow_id), ()):
+                exc["flow"] = deepcopy(new_flow)
+                n_retargeted += 1
 
     log.info(
         f"Cloned shared production flows: "
