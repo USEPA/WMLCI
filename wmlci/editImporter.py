@@ -22,6 +22,18 @@ from esupy.util import make_uuid
 # values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
 _NO_TARGET = {"n.a.", "nan", "none", ""}
 
+# Single US location used by reset/replace location cleaners
+_US_LOCATION = {
+    "@type": "Location",
+    "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
+    "name": "United States",
+    "category": "Country",
+    "version": "00.00.000",
+    "code": "US",
+    "latitude": 45.68811936470228,
+    "longitude": -112.49616351105776,
+}
+
 
 ##############################################################
 ### Ensure carbon storage exchanges are credits (negative) ###
@@ -271,19 +283,7 @@ def reset_location_dict(jsonld):
     bw2io.importers.json_ld.JSONLDImporter
         The same importer instance, with updated locations.
     """
-    # Reset locations dictionary
-    jsonld.data["locations"] = {
-        "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2": {
-            "@type": "Location",
-            "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
-            "name": "United States",
-            "category": "Country",
-            "version": "00.00.000",
-            "code": "US",
-            "latitude": 45.68811936470228,
-            "longitude": -112.49616351105776
-        }
-    }
+    jsonld.data["locations"] = {_US_LOCATION["@id"]: dict(_US_LOCATION)}
     return jsonld
 
 def replace_process_location(jsonld):
@@ -303,12 +303,11 @@ def replace_process_location(jsonld):
     """
     log.info("\nAdding or replacing locations in processes...")
 
-    # Define the standard location dictionary
     standard_location = {
-        "@type": "Location",
-        "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
-        "name": "United States",
-        "category": "Country"
+        "@type": _US_LOCATION["@type"],
+        "@id": _US_LOCATION["@id"],
+        "name": _US_LOCATION["name"],
+        "category": _US_LOCATION["category"],
     }
 
     for process_id, process in jsonld.data.get("processes", {}).items():
@@ -343,7 +342,7 @@ def replace_exchange_locations(jsonld):
     for pid, process in jsonld.data.get("processes", {}).items():
         for exc in process.get("exchanges", []):
             # Always replace or add location with parent's location dict
-            exc["location"] = "United States"
+            exc["location"] = _US_LOCATION["name"]
 
     return jsonld
 
