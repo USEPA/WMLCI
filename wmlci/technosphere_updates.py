@@ -104,12 +104,17 @@ def convert_amount(
     raise ValueError(f"No conversion from {a!r} to {b!r}")
 
 
-def _normalize_exchange_unit(exc: dict, data: dict) -> None:
+def _normalize_exchange_unit(
+    exc: dict, data: dict, skips: set[str] | None = None
+) -> None:
     """Fold exchange onto flow ref-property + group ``isRefUnit`` for Brightway.
 
     Brightway does ``amount *= unit.conversionFactor`` then labels with
     ``flow.refUnit``, so the exchange unit must already be the group reference.
     Prefer ``data``'s unit ``@id`` by name (target inventory after merge).
+
+    Unconvertible units are recorded in ``skips`` (unique messages) when provided;
+    otherwise logged immediately.
     """
     unit = exc.get("unit")
     if not isinstance(unit, dict) or not unit.get("name"):
@@ -122,6 +127,13 @@ def _normalize_exchange_unit(exc: dict, data: dict) -> None:
                 if (u.get("name") or "").strip() == want:
                     return ug, u
         return None, None
+
+    def _skip(kind: str, flow_name: str | None, err: Exception) -> None:
+        msg = f"Unit {kind} skip '{flow_name}': {err}"
+        if skips is not None:
+            skips.add(msg)
+        else:
+            log.warning(msg)
 
     from_u = unit["name"]
     embed = exc.get("flow") or {}
@@ -146,7 +158,7 @@ def _normalize_exchange_unit(exc: dict, data: dict) -> None:
             amount = convert_amount(amount, cur, prop_ref, flow=flow, datasets=(data,))
             cur = prop_ref
         except ValueError as err:
-            log.warning(f"Unit prop-ref skip '{embed.get('name')}': {err}")
+            _skip("prop-ref", embed.get("name"), err)
 
     # Fold to group isRefUnit (MWh → MJ, Mg → kg, …)
     ug, _ = _lookup(cur)
@@ -156,7 +168,7 @@ def _normalize_exchange_unit(exc: dict, data: dict) -> None:
             amount = convert_amount(amount, cur, ref, datasets=(data,))
             cur = ref
         except ValueError as err:
-            log.warning(f"Unit group-ref skip '{embed.get('name')}': {err}")
+            _skip("group-ref", embed.get("name"), err)
             return
 
     prop_ug, _ = _lookup(prop_ref) if prop_ref else (None, None)
@@ -504,7 +516,9 @@ def _copy_flow_location_and_unit_for_exchange(target_data, source_data, exchange
         _copy_unit_groups(target_data, source_data, unit_id=unit_id)
 
 
-def copy_process_and_its_providers(target_importer, source_importer, process_id):
+def copy_process_and_its_providers(
+    target_importer, source_importer, process_id, unit_skips: set[str] | None = None
+):
     """Copy a process and every process it uses as a defaultProvider."""
     target_data = target_importer.data
     source_data = source_importer.data
@@ -545,7 +559,7 @@ def copy_process_and_its_providers(target_importer, source_importer, process_id)
 
         # Convert cross-dimension units now that flows/unit_groups are in target
         for exc in copied.get("exchanges", []):
-            _normalize_exchange_unit(exc, target_data)
+            _normalize_exchange_unit(exc, target_data, skips=unit_skips)
             unit = exc.get("unit")
             if isinstance(unit, dict) and unit.get("@id"):
                 _copy_unit_groups(target_data, source_data, unit_id=unit["@id"])
@@ -673,6 +687,7 @@ def replace_input_provider(
     spec: dict[str, Any],
     config: dict[str, Any] | None = None,
     root_names=(),
+    unit_skips: set[str] | None = None,
 ):
     """Replace inputs that use provider_name with the process named in spec."""
     data_source = spec.get("data_source")
@@ -711,7 +726,10 @@ def replace_input_provider(
         old_unit = exchange.get("unit")
 
         merged = copy_process_and_its_providers(
-            importer, index["source"], replacement["process_id"]
+            importer,
+            index["source"],
+            replacement["process_id"],
+            unit_skips=unit_skips,
         )
         if merged:
             log.info(
@@ -800,6 +818,7 @@ def update_technosphere_flows(
     total_replaced = 0
     total_dropped = 0
     total_skipped = 0
+    unit_skips: set[str] = set()
 
     for foreground_name, settings in processes.items():
         updates_name = settings.get("technosphere_updates")
@@ -838,6 +857,7 @@ def update_technosphere_flows(
                 replacement,
                 config=config,
                 root_names=root_names,
+                unit_skips=unit_skips,
             )
             if replaced:
                 file_replaced += replaced
@@ -852,6 +872,12 @@ def update_technosphere_flows(
         total_replaced += file_replaced
         total_dropped += file_dropped
         total_skipped += file_skipped
+
+    if unit_skips:
+        log.warning(
+            f"Unit conversion skips ({len(unit_skips)} unique):\n"
+            + "\n".join(f"  - {msg}" for msg in sorted(unit_skips))
+        )
 
     log.info(
         f"Technosphere updates complete: {total_replaced} replaced, "

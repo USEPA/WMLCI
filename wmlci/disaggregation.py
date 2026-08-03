@@ -149,10 +149,6 @@ def validate_allocation_factors_for_process(
         return True
 
     if _is_burden_free_byproduct_case(values, tolerance):
-        log.info(
-            f"Process '{process.get('name', '<unnamed>')}' "
-            f"uses burden-free byproduct allocation under {allocation_method}"
-        )
         return True
 
     return False
@@ -165,10 +161,12 @@ def validate_allocation_factors_globally(
     Global gate: validate all multifunctional processes before splitting.
     - Resolves best method via priority PHYSICAL -> ECONOMIC -> CAUSAL.
     - Overrides process['defaultAllocationMethod'] when the resolved method differs.
-    - Logs method overrides and validation warnings.
+    - Logs a summary of method overrides and burden-free byproduct cases.
     - Returns False (abort) only if no valid method can be found for a multifunctional process.
     """
     process_map: Dict[str, Dict] = importer.data.get("processes", {})
+    n_overrides = 0
+    n_burden_free = 0
 
     for process_id, process in process_map.items():
         products = get_product_exchanges(process)
@@ -177,9 +175,9 @@ def validate_allocation_factors_globally(
 
         default_method = process.get("defaultAllocationMethod")
         resolved_method = resolve_allocation_method_with_priority(process, tolerance)
+        process_name = process.get("name", "<unnamed>")
 
         if resolved_method is None:
-            process_name = process.get("name", "<unnamed>")
             log.info(
                 f"Global allocation validation failed: no valid method found "
                 f"for process {process_name} ({process_id}); default={default_method}"
@@ -188,19 +186,38 @@ def validate_allocation_factors_globally(
 
         if resolved_method != default_method:
             process["defaultAllocationMethod"] = resolved_method
-            log.info(
-                f"Allocation method override: process '{process.get('name','<unnamed>')}' "
-                f"({process_id}) default '{default_method}' -> '{resolved_method}'"
-            )
+            n_overrides += 1
 
         # Validate under resolved method (now set as default)
-        if not validate_allocation_factors_for_process(process, tolerance, allocation_method=resolved_method):
-            process_name = process.get("name", "<unnamed>")
+        if not validate_allocation_factors_for_process(
+            process, tolerance, allocation_method=resolved_method
+        ):
             log.info(
                 f"Global allocation validation failed under method '{resolved_method}' "
                 f"for process {process_name} ({process_id})"
             )
             return False
+
+        values = _collect_allocation_values_for_method(
+            process, resolved_method, products
+        )
+        if values is not None and _is_burden_free_byproduct_case(values, tolerance):
+            n_burden_free += 1
+
+    if n_overrides or n_burden_free:
+        parts = []
+        if n_overrides:
+            parts.append(
+                f"{n_overrides} multifunctional process(es) switched from their "
+                f"openLCA default allocation method to a higher-priority valid "
+                f"method (PHYSICAL > ECONOMIC > CAUSAL)"
+            )
+        if n_burden_free:
+            parts.append(
+                f"{n_burden_free} process(es) use burden-free byproducts "
+                f"(one product gets factor 1.0, co-products get 0.0)"
+            )
+        log.info("Allocation validation: " + "; ".join(parts) + ".")
 
     return True
 

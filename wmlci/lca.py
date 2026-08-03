@@ -14,7 +14,10 @@ from wmlci.editImporter import (
     correct_jsonld_input_key,
     map_lcia_to_fedelemflowlist_UUIDs,
 )
-from wmlci.errorLogging import check_for_errors_in_jsonld_import
+from wmlci.errorLogging import (
+    check_for_errors_in_jsonld_import,
+    validate_jsonld_exchanges,
+)
 from wmlci.jsonld_loader import clean_JSONLD_sourceData, load_JSONLD_sourceData
 from wmlci.log import log
 from wmlci.method_config import load_method_config
@@ -67,6 +70,14 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     # keep duplicative input/isInput keys because
     # json_ld_allocate_datasets uses input, while json_ld_add_activity_unit uses isInput
     jsonld = correct_jsonld_input_key(jsonld)
+    # FEDEFL + input-key fixes are done; report only remaining exchange issues
+    issues = validate_jsonld_exchanges(jsonld)
+    if issues:
+        log.warning("Validation found problems:")
+        for issue in issues:
+            log.warning(" - " + issue)
+    else:
+        log.info("Exchanges validated successfully.")
     # fix issues when openLCA and brightway have to talk by manipulating data sets
     jsonld.apply_strategies()
     # merge biosphere flows
