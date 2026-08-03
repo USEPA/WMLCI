@@ -250,11 +250,3 @@ def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str
     )
 
     return {"summary": str(results_path), "detail": str(detail_path)}
-
-
-if __name__ == "__main__":
-    from wmlci.lca import run_bw_lca
-    import sys
-
-    method = sys.argv[1] if len(sys.argv) > 1 else "v16"
-    run_bw_lca(method)
