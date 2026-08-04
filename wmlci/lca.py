@@ -134,8 +134,10 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         f"Assessing {len(processes)} scenarios:\n" + "\n".join(scenario_lines)
     )
 
-    results_df, detail_df = calculate_lca_results(db, processes, config)
-    paths = write_lca_outputs(results_df, detail_df, config)
+    results_df, detail_df, characterized_df = calculate_lca_results(
+        db, processes, config
+    )
+    paths = write_lca_outputs(results_df, detail_df, characterized_df, config)
 
     print("\nLCA results (all scenarios):")
     print(results_df.to_string(index=False))
@@ -145,6 +147,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         "config": config,
         "summary": results_df,
         "detail": detail_df,
+        "characterized_inventory": characterized_df,
         "paths": paths,
         "scenarios": [
             (a["name"], p["name"])
