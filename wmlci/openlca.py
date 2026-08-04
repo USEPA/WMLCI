@@ -18,7 +18,7 @@ import pandas as pd
 from bw2calc import LCA
 
 from wmlci.log import log
-from wmlci.settings import resultspath
+from wmlci.settings import resultspath, versioned_filename
 
 _UNIT_LABEL = {
     "kilogram": "kg",
