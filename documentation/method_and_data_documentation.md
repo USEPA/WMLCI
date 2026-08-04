@@ -6,7 +6,20 @@ To run an LCIA, users can either run an existing method YAML or create their own
 
 The package is initially being developed to replicate and improve on the EPA's Waste Reduction Model v16 [Excel tool](https://www.epa.gov/waste-reduction-model/versions-waste-reduction-model). However, this package is also being developed to run LCIAs beyond greenhouse gas emission data, for other indicators such as [EPA TRACI's](https://www.epa.gov/chemical-research/tool-reduction-and-assessment-chemicals-and-other-environmental-impacts-traci) human health impacts.
 
-Inventory and LCIA datasets can be pulled from the Federal LCA Commons (FLCAC) via API, by creating a new YAML in the `extract/` directory. so any Commons dataset can be brought into a method. FLCAC datasets are already mapped to federal elementary flows ([FEDEFL](https://github.com/FLCAC-admin/fedelemflowlist)); WMLCI uses these mappings when harmonizing inventory and characterization factors.
+## Available Data Sources
+Raw data sources used by WMLCI are defined under [`wmlci/extract/`](../wmlci/extract/) via YAML files. These YAMLs essentially contain instructions on how to retrieve the raw data. Most sources are downloaded from the [Federal LCA Commons](https://www.lcacommons.gov/) (FLCAC) via the API - see [`extract/README.md`](../wmlci/extract/README.md) for accessing and storing API keys. The Commons hosts openLCA-compatible JSON-LD repositories published by federal agencies and partners. Waste Reduction Model openLCA inventories are stored on [EPA Data Commons](https://dmap-data-commons-ord.s3.amazonaws.com/index.html#WMLCI/sourceData/). 
+
+Running the methods will download and unzip any necessary raw data to a user's local `wmlci/data/source_data/`. FLCAC datasets are already mapped to federal elementary flows ([FEDEFL](https://github.com/FLCAC-admin/fedelemflowlist)); WMLCI uses those mappings when harmonizing inventory and characterization factors.
+
+| Extract YAML | Host | Dataset | Description |
+|--------------|------|---------|-------------|
+| [`ipcc_gwp.yaml`](../wmlci/extract/ipcc_gwp.yaml) | FLCAC | [IPCC GWP](https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/IPCC_GWP/dataset/IMPACT_METHOD/00feb6d9-9282-3bcf-9d18-7b040f516935) | IPCC global warming potential LCIA methods (e.g. AR4-100, AR6-100) |
+| [`traci_2_2.yaml`](../wmlci/extract/traci_2_2.yaml) | FLCAC | [TRACI 2.2](https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/TRACI_2_2/dataset/IMPACT_METHOD/52ce6d64-4e91-347e-8c0b-4b616b2c0339) | EPA TRACI 2.2 impact method (human health and other midpoints beyond GHG) |
+| [`uslci.yaml`](../wmlci/extract/uslci.yaml) | FLCAC | [USLCI Database Public](https://www.lcacommons.gov/lca-collaboration/National_Renewable_Energy_Laboratory/USLCI_Database_Public/datasets) | US life cycle inventory unit processes (transport, materials, manufacturing, etc.) |
+| [`us_electricity_baseline.yaml`](../wmlci/extract/us_electricity_baseline.yaml) | FLCAC | [US Electricity Baseline](https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/US_electricity_baseline/datasets) | Regional US grid electricity generation inventories |
+| [`heavy_equipment_operation.yaml`](../wmlci/extract/heavy_equipment_operation.yaml) | FLCAC | [Heavy Equipment Operation](https://www.lcacommons.gov/lca-collaboration/US_Environmental_Protection_Agency/Heavy_equipment_operation/datasets) | EPA heavy-equipment / diesel operation processes (e.g. landfill diesel) |
+| — (`waste_reduction_model_v16.zip`) | EPA Data Commons | [WMLCI sourceData](https://dmap-data-commons-ord.s3.amazonaws.com/index.html#WMLCI/sourceData/) | Full Waste Reduction Model v16 openLCA JSON-LD archive on Data Commons (base inventory) |
+| [`waste_reduction_model_v16_pilot.yaml`](../wmlci/extract/waste_reduction_model_v16_pilot.yaml) | EPA Data Commons (derived) | [WMLCI sourceData](https://dmap-data-commons-ord.s3.amazonaws.com/index.html#WMLCI/sourceData/) | Pruned/edited Waste Reduction Model v16 inventory for the three material–pathway scenarios; built from `waste_reduction_model_v16` via [`edit_original_v16_model`](../wmlci/edit_original_v16_model.py) |
 
 Please note that there are on-going improvements being made to these methods.
 

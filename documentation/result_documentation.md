@@ -1,6 +1,6 @@
 # Result documentation: v16 vs wmlci_pilot
 
-This page describes the comparison graphics for the LCA methods and explains why the scores differ. Methods details are in [`method_documentation.md`](method_documentation.md).
+This page describes the comparison graphics for the LCA methods and explains why the scores differ. Methods details are in [`method_documentation.md`](method_and_data_documentation).
 
 Differences in results between the two methods are due to:
 1) **Inventory updates** updated FLCAC data in the `wmlci_pilot` method
