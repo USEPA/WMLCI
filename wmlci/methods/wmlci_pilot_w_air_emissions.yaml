@@ -5,6 +5,7 @@
 #   - Improved electricity
 #   - Improved plastics recycling
 #   - Add SwolfPy air emissions data
+#   - TRACI 2.2 Smog formation LCIA (non-GHG)
 
 # Models 3 material-pathway combinations:
 #   a) incineration + plastic
@@ -17,13 +18,15 @@ bw_project_name: wmlci_pilot_w_air_emissions
 inventory_source: waste_reduction_model_v16_pilot_w_swolfpy # new json file with swolfpy data
 inventory_database: openlca_db
 
-lcia_input: TRACI_2_2
+lcia_input: traci_2_2
 lcia_input_version: 1.2025-04.0
-lcia_db_name: TRACI_2_2
-fedelemflowlist_source: TRACI_2_2
+lcia_db_name: TRACI 2.2
+fedelemflowlist_source: TRACI2.2
 lcia_unit: kg O3 eq
+lcia_label: Smog formation (TRACI 2.2)
 
 lcia_method:
+  - TRACI 2.2
   - Smog formation
 
 model_defaults:
