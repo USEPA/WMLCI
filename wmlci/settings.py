@@ -96,3 +96,43 @@ GIT_HASH = GIT_HASH_LONG[:7] if GIT_HASH_LONG else None
 
 # Common declaration of write format for package data products
 WRITE_FORMAT = "csv"  # todo: change to parquet?
+
+
+def versioned_filename(name: str) -> str:
+    """
+    Append package version and git hash (esupy / flowsa style).
+
+    ``name.csv`` -> ``name_v{version}_{githash}.csv``
+    """
+    path = Path(name)
+    stem = path.stem
+    suffix = path.suffix
+    out = f"{stem}_v{PKG_VERSION_NUMBER}"
+    if GIT_HASH:
+        out = f"{out}_{GIT_HASH}"
+    return f"{out}{suffix}"
+
+
+def find_versioned_file(directory: Path, base_name: str) -> Path | None:
+    """
+    Locate a result file written with ``versioned_filename``.
+
+    Preference order: newest versioned match by mtime, then the unversioned
+    base name.
+    """
+    directory = Path(directory)
+    base = Path(base_name)
+    stem, suffix = base.stem, base.suffix
+
+    matches = sorted(
+        directory.glob(f"{stem}_v*{suffix}"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if matches:
+        return matches[0]
+
+    plain = directory / base_name
+    if plain.exists():
+        return plain
+    return None

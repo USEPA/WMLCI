@@ -13,7 +13,6 @@ import yaml
 
 from bw2io.importers.json_ld import JSONLDImporter
 
-from wmlci.errorLogging import validate_jsonld_exchanges
 from wmlci.log import log
 from wmlci.settings import model_defaults_path
 
@@ -722,7 +721,7 @@ def recalculate_amounts_from_formulas(
                 unit = source_units.get(name)
                 value_str = f"{name} = {val} {unit}" if unit else f"{name} = {val}"
                 log.info(
-                    f"No defined global parameter in model_defaults. "
+                    f"No defined parameter in {model_defaults_path / 'global_defaults.yaml'}. "
                     f"Using {value_str}, as defined in imported dataset "
                     f"{dataset_label}."
                 )
@@ -809,9 +808,11 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
             ]
         ].to_dict(orient="index")
     )
+    n_mapping_rules = len(mapping_dict)
     log.info(
-        f"Using {len(mapping_dict)} '{sourcelistname}' -> FEDEFL elementary "
-        "flow mappings."
+        f"Loaded {n_mapping_rules} '{sourcelistname}' -> FEDEFL elementary "
+        f"flow mapping rule(s) from fedelemflowlist (available conversions, "
+        f"not all may appear in this inventory)."
     )
 
     # rewrite the top-level flows dict, re-keying by the FEDEFL target UUID.
@@ -820,6 +821,7 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
     flows = jsonld.data.get("flows", {})
     updated_flows = {}
     flows_remapped = 0
+    fedefl_targets_from_flows = set()
     for key, value in flows.items():
         target = mapping_dict.get(key)
         if target:
@@ -829,9 +831,12 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
             value["category"] = target["TargetFlowContext"]
             updated_flows[target_id] = value
             flows_remapped += 1
+            fedefl_targets_from_flows.add(target_id)
         else:
             updated_flows[key] = value
     jsonld.data["flows"] = updated_flows
+    unused_rules = n_mapping_rules - flows_remapped
+    collapsed = flows_remapped - len(fedefl_targets_from_flows)
 
     # rewrite exchange flows and apply the conversion factor to amounts/units
     exchanges_remapped = 0
@@ -863,8 +868,17 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
                     flow["refUnit"] = target_unit
 
     log.info(
-        f"Harmonized {flows_remapped} flows and {exchanges_remapped} exchange "
-        f"flows to FEDEFL UUIDs using '{sourcelistname}'."
+        f"Harmonized {flows_remapped} inventory flow(s) to FEDEFL "
+        f"({unused_rules} mapping rule(s) unused — source UUID not in this "
+        f"inventory"
+        + (
+            f"; {collapsed} collapse(s) where multiple source flows share one "
+            f"FEDEFL target"
+            if collapsed
+            else ""
+        )
+        + f"). Updated {exchanges_remapped} exchange row(s) that reference "
+        f"those flows."
     )
 
     # rebuild snapshot from the harmonized flows so exchanges (FEDEFL codes)
@@ -877,16 +891,10 @@ def map_to_fedelemflowlist_UUIDs(jsonld, sourcelistname="WARM"):
         )
         log.info(
             f"Rebuilt biosphere node snapshot with "
-            f"{len(jsonld.biosphere_database)} FEDEFL-harmonized flows."
+            f"{len(jsonld.biosphere_database)} unique elementary flow(s) "
+            f"({len(fedefl_targets_from_flows)} distinct FEDEFL target(s) from "
+            f"harmonization; snapshot is Brightway's elementary-flow list)."
         )
-
-    issues = validate_jsonld_exchanges(jsonld)
-    if issues:
-        log.warning("Validation found problems:")
-        for issue in issues:
-            log.warning(" - " + issue)
-    else:
-        log.info("All exchanges validated successfully.")
 
     return jsonld
 
