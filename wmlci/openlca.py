@@ -16,6 +16,7 @@ import bw2data as bd
 import numpy as np
 import pandas as pd
 from bw2calc import LCA
+from scipy import sparse as sp
 
 from wmlci.log import log
 from wmlci.settings import resultspath, versioned_filename
@@ -36,8 +37,8 @@ DETAIL_COLUMNS = [
     "functional_unit",
     "product_amount",
     "product_amount_unit",
-    "emissions_per_unit_of_product",
-    "emissions_per_unit_of_product_unit",
+    "impact_per_unit_of_product",
+    "impact_per_unit_of_product_unit",
     "FlowAmount",
     "FlowAmount_unit",
     "method",
@@ -45,20 +46,20 @@ DETAIL_COLUMNS = [
 
 CHARACTERIZED_COLUMNS = [
     "process",
-    "reference_product",
     "functional_unit",
-    "location",
     "elementary_flow",
-    "categories",
     "inventory_amount",
     "inventory_unit",
     "characterized_amount",
     "characterized_unit",
-    "characterized_share",
     "method",
 ]
 
-METHOD_UNIT = "kg CO2e"
+
+def lcia_unit(config: dict[str, Any]) -> str:
+    """Impact unit from method config (e.g. kg CO2e, kg SO2e, m3)."""
+    return str(config.get("lcia_unit") or "").strip()
+
 
 
 def return_process_product(db):
@@ -158,7 +159,7 @@ def build_process_meta(db) -> dict:
 def calculate_lca_results(db, processes, config: dict[str, Any]):
     """Run LCA for each configured process scenario; return summary, detail, and flow dfs."""
     method = tuple(config["lcia_method"])
-    # IPCC GWP methods are kg CO2 equivalents
+    unit = lcia_unit(config)
     process_meta = build_process_meta(db)
 
     results = []        # one row per scenario (summary)
@@ -193,8 +194,7 @@ def calculate_lca_results(db, processes, config: dict[str, Any]):
             "location": activity.get("location", ""),
             "method": str(method),
             "score": score,
-            "score_unit": METHOD_UNIT,
-            "score_metric_ton_co2e": score / 1000,
+            "score_unit": unit,
         })
 
         # decompose the system score by process: characterized_inventory column sums
@@ -218,7 +218,7 @@ def calculate_lca_results(db, processes, config: dict[str, Any]):
             production_amount = meta.get("production_amount") or 1
             product_amount = process_supply * production_amount
             product_unit = meta.get("supply_unit", "")
-            emissions_per_unit_of_product = (
+            impact_per_unit = (
                 direct_contribution / product_amount if product_amount else None
             )
 
@@ -230,44 +230,36 @@ def calculate_lca_results(db, processes, config: dict[str, Any]):
                 "functional_unit": fu_label,
                 "product_amount": product_amount,
                 "product_amount_unit": product_unit,
-                "emissions_per_unit_of_product": emissions_per_unit_of_product,
-                "emissions_per_unit_of_product_unit": (
-                    f"{METHOD_UNIT} / {product_unit}" if product_unit else METHOD_UNIT
+                "impact_per_unit_of_product": impact_per_unit,
+                "impact_per_unit_of_product_unit": (
+                    f"{unit} / {product_unit}" if product_unit else unit
                 ),
                 "FlowAmount": direct_contribution,
-                "FlowAmount_unit": METHOD_UNIT,
+                "FlowAmount_unit": unit,
                 "method": str(method),
             })
 
-        # elementary-flow inventory + characterized contribution to the scenario score
+        # Scenario totals by elementary flow (any impact method: GHG, air, water, …).
+        # Sum inventory and characterized inventory across all activities.
         inv = lca.inventory  # biosphere flows x processes
-        inv_by_flow = np.asarray(inv.sum(axis=1)).ravel()
-        ci_by_flow = np.asarray(ci.sum(axis=1)).ravel()
-        for flow_idx in np.argsort(np.abs(ci_by_flow))[::-1]:
-            inv_amt = float(inv_by_flow[flow_idx])
-            char_amt = float(ci_by_flow[flow_idx])
-            if abs(inv_amt) < 1e-12 and abs(char_amt) < 1e-12:
+        inv_sp = inv if sp.issparse(inv) else sp.csr_matrix(np.asarray(inv))
+        ci_sp = ci if sp.issparse(ci) else sp.csr_matrix(np.asarray(ci))
+        inv_by_flow = np.asarray(inv_sp.sum(axis=1)).ravel()
+        char_by_flow = np.asarray(ci_sp.sum(axis=1)).ravel()
+
+        for flow_idx, flow_id in lca.dicts.biosphere.reversed.items():
+            char_amt = float(char_by_flow[flow_idx])
+            if abs(char_amt) < 1e-12:
                 continue
-            flow = bd.get_activity(lca.dicts.biosphere.reversed[flow_idx])
-            cats = flow.get("categories") or ()
-            if isinstance(cats, (list, tuple)):
-                cats_label = "::".join(str(c) for c in cats)
-            else:
-                cats_label = str(cats) if cats else ""
+            flow = bd.get_activity(flow_id)
             flow_rows.append({
                 "process": activity["name"],
-                "reference_product": product.get("name", ""),
                 "functional_unit": fu_label,
-                "location": activity.get("location", ""),
                 "elementary_flow": flow.get("name", ""),
-                "categories": cats_label,
-                "inventory_amount": inv_amt,
-                "inventory_unit": flow.get("unit", ""),
+                "inventory_amount": float(inv_by_flow[flow_idx]),
+                "inventory_unit": flow.get("unit") or "kilogram",
                 "characterized_amount": char_amt,
-                "characterized_unit": METHOD_UNIT,
-                "characterized_share": (
-                    char_amt / score if score not in (0, None) else float("nan")
-                ),
+                "characterized_unit": unit,
                 "method": str(method),
             })
 
@@ -316,8 +308,8 @@ def write_lca_outputs(
         f"written to {detail_path}"
     )
     log.info(
-        f"Characterized inventory ({len(characterized_df)} elementary-flow rows) "
-        f"written to {char_path}"
+        f"Characterized inventory ({len(characterized_df)} scenario-flow "
+        f"rows) written to {char_path}"
     )
 
     return {

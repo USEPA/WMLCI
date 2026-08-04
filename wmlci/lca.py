@@ -37,7 +37,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     Parameters
     ----------
     method_name
-        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_pilot``).
+        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_demo``).
 
     Returns
     -------
@@ -102,7 +102,10 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     # link to inventory by UUID
     jsonldlcia.apply_strategies()
     jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
-        jsonldlcia, sourcelistname="IPCC"
+        jsonldlcia,
+        sourcelistname=config.get("fedelemflowlist_source")
+        or config.get("lcia_db_name")
+        or "IPCC",
     )
     jsonldlcia.match_biosphere_by_id(config["inventory_database"])
     # drop the CFs that do not match a flow
