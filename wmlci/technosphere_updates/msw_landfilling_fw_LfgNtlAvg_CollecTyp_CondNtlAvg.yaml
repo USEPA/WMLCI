@@ -9,6 +9,11 @@ technosphere_exchanges:
     data_version: 1.2026-06.0
     product: "Electricity, AC, 120 V"
     process: "Electricity; at user; consumption mix - US - US"
+  "Landfill operation, diesel":
+    data_source: heavy_equipment_operation
+    data_version: 1.2025-07.0
+    product: "Diesel equipment operation; industry average; > 56 kW and < 560 kW"
+    process: "Operation of diesel equipment; industry average; > 56 kW and < 560 kW"
 
 # technosphere_exchange_drops:
 #   - "XXX"

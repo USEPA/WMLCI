@@ -22,6 +22,18 @@ from esupy.util import make_uuid
 # values that mean "no FEDEFL target" in the fedelemflowlist mapping tables
 _NO_TARGET = {"n.a.", "nan", "none", ""}
 
+# Single US location used by reset/replace location cleaners
+_US_LOCATION = {
+    "@type": "Location",
+    "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
+    "name": "United States",
+    "category": "Country",
+    "version": "00.00.000",
+    "code": "US",
+    "latitude": 45.68811936470228,
+    "longitude": -112.49616351105776,
+}
+
 
 ##############################################################
 ### Ensure carbon storage exchanges are credits (negative) ###
@@ -271,19 +283,7 @@ def reset_location_dict(jsonld):
     bw2io.importers.json_ld.JSONLDImporter
         The same importer instance, with updated locations.
     """
-    # Reset locations dictionary
-    jsonld.data["locations"] = {
-        "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2": {
-            "@type": "Location",
-            "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
-            "name": "United States",
-            "category": "Country",
-            "version": "00.00.000",
-            "code": "US",
-            "latitude": 45.68811936470228,
-            "longitude": -112.49616351105776
-        }
-    }
+    jsonld.data["locations"] = {_US_LOCATION["@id"]: dict(_US_LOCATION)}
     return jsonld
 
 def replace_process_location(jsonld):
@@ -303,12 +303,11 @@ def replace_process_location(jsonld):
     """
     log.info("\nAdding or replacing locations in processes...")
 
-    # Define the standard location dictionary
     standard_location = {
-        "@type": "Location",
-        "@id": "0b3b97fa-6688-3c56-88ee-4ae80ec0c3c2",
-        "name": "United States",
-        "category": "Country"
+        "@type": _US_LOCATION["@type"],
+        "@id": _US_LOCATION["@id"],
+        "name": _US_LOCATION["name"],
+        "category": _US_LOCATION["category"],
     }
 
     for process_id, process in jsonld.data.get("processes", {}).items():
@@ -343,7 +342,7 @@ def replace_exchange_locations(jsonld):
     for pid, process in jsonld.data.get("processes", {}).items():
         for exc in process.get("exchanges", []):
             # Always replace or add location with parent's location dict
-            exc["location"] = "United States"
+            exc["location"] = _US_LOCATION["name"]
 
     return jsonld
 
@@ -381,94 +380,37 @@ def _exchange_is_input(exc: dict) -> bool:
     return bool(exc.get("isInput"))
 
 
-def drop_non_reference_product_outputs(jsonld):
-    """
-    Drop non-quantitative-reference product/waste outputs so each process has
-    one production exchange.
-
-    Use when co-products are not needed as separate products. All burden stays
-    on the reference product.
-    """
-    log.info("Dropping non-quantitative-reference co-product outputs...")
-    n_dropped = 0
-    n_cleared_af = 0
-
-    for process_id, process in jsonld.data.get("processes", {}).items():
-        if process.get("type") in {"emission", "product"}:
-            continue
-        exchanges = process.get("exchanges") or []
-        outputs = [
-            exc
-            for exc in exchanges
-            if not _exchange_is_input(exc)
-            and not exc.get("avoidedProduct")
-            and (exc.get("flow") or {}).get("flowType")
-            in {"PRODUCT_FLOW", "WASTE_FLOW"}
-        ]
-        if len(outputs) <= 1:
-            if process.get("allocationFactors"):
-                process.pop("allocationFactors", None)
-                process["defaultAllocationMethod"] = "NO_ALLOCATION"
-                n_cleared_af += 1
-            continue
-
-        qref = next(
-            (
-                exc
-                for exc in outputs
-                if exc.get("isQuantitativeReference")
-                or exc.get("quantitativeReference")
-            ),
-            None,
-        )
-        if qref is None:
-            product_outs = [
-                exc
-                for exc in outputs
-                if (exc.get("flow") or {}).get("flowType") == "PRODUCT_FLOW"
-            ]
-            qref = product_outs[0] if product_outs else outputs[0]
-
-        drop_ids = {id(exc) for exc in outputs if exc is not qref}
-        before = len(exchanges)
-        process["exchanges"] = [
-            exc for exc in exchanges if id(exc) not in drop_ids
-        ]
-        n_dropped += before - len(process["exchanges"])
-        if process.get("allocationFactors"):
-            process.pop("allocationFactors", None)
-            process["defaultAllocationMethod"] = "NO_ALLOCATION"
-            n_cleared_af += 1
-
-    log.info(
-        f"Dropped {n_dropped} non-reference co-product output(s); "
-        f"cleared allocationFactors on {n_cleared_af} process(es)."
-    )
-    return jsonld
-
-
 def clone_shared_production_flows(jsonld):
     """
     Ensure each process has a unique production product flow.
 
-    Background datasets ( electricity / transport) often reuse one product-flow
+    Background datasets (electricity / transport) often reuse one product-flow
     UUID across many regional processes. Brightway then builds a non-square
-    technosphere matrix with more process columns than product rows. Clone the product
-    flow per colliding producer and retarget that producer's consumers.
+    technosphere matrix with more process columns than product rows. Clone the
+    product flow per colliding producer and retarget that producer's consumers.
+
+    Consumers are indexed by (provider_id, flow_id) once so retargeting is
+    O(exchanges) instead of rescanning the whole database per clone.
     """
     processes = jsonld.data.get("processes", {})
     flows = jsonld.data.setdefault("flows", {})
 
     producers = defaultdict(list)
+    consumers_by_provider_flow = defaultdict(list)
     for pid, process in processes.items():
         for exc in process.get("exchanges") or []:
-            if _exchange_is_input(exc) or exc.get("avoidedProduct"):
-                continue
             flow = exc.get("flow") or {}
-            if flow.get("flowType") != "PRODUCT_FLOW":
-                continue
             flow_id = flow.get("@id")
-            if flow_id:
+            if not flow_id:
+                continue
+            if _exchange_is_input(exc):
+                provider_id = (exc.get("defaultProvider") or {}).get("@id")
+                if provider_id and flow.get("flowType") == "PRODUCT_FLOW":
+                    consumers_by_provider_flow[(provider_id, flow_id)].append(exc)
+                continue
+            if exc.get("avoidedProduct"):
+                continue
+            if flow.get("flowType") == "PRODUCT_FLOW":
                 producers[flow_id].append((pid, exc))
 
     n_cloned = 0
@@ -485,19 +427,9 @@ def clone_shared_production_flows(jsonld):
             flows[new_id] = new_flow
             production_exc["flow"] = deepcopy(new_flow)
             n_cloned += 1
-            # Retarget consumers of this producer that still point at the old flow.
-            for process in processes.values():
-                for exc in process.get("exchanges") or []:
-                    if not _exchange_is_input(exc):
-                        continue
-                    provider = exc.get("defaultProvider") or {}
-                    exc_flow = exc.get("flow") or {}
-                    if (
-                        provider.get("@id") == pid
-                        and exc_flow.get("@id") == flow_id
-                    ):
-                        exc["flow"] = deepcopy(new_flow)
-                        n_retargeted += 1
+            for exc in consumers_by_provider_flow.get((pid, flow_id), ()):
+                exc["flow"] = deepcopy(new_flow)
+                n_retargeted += 1
 
     log.info(
         f"Cloned shared production flows: "

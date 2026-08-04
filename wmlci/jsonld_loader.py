@@ -7,11 +7,23 @@ import zipfile
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
-from wmlci.settings import extractpath, paths, source_data_path
+from wmlci.disaggregation import split_multi_product_processes
+from wmlci.editImporter import (
+    apply_carbon_storage_credit,
+    apply_opposite_direction_approach,
+    clone_shared_production_flows,
+    convert_param_list_to_dict,
+    map_to_fedelemflowlist_UUIDs,
+    recalculate_amounts_from_formulas,
+    remove_impact_free_objects,
+    remove_process_allocation_factors,
+    replace_exchange_locations,
+    replace_process_location,
+    reset_location_dict,
+)
 from wmlci.extract.extract_common import extract_source_data, jsonld_source_dir
 from wmlci.log import log
-from wmlci.editImporter import *
-from wmlci.errorLogging import *
+from wmlci.settings import extractpath, paths, source_data_path
 
 from esupy.remote import make_url_request
 from esupy.processed_data_mgmt import mkdir_if_missing
@@ -115,12 +127,11 @@ def clean_JSONLD_background_data(jsonld):
     Does not map elementary flows to FEDEFL, as FLCAC data already uses
     federal elementary flow UUIDs.
 
-    Co-products of background providers are not needed as separate products:
-    drop non-quantitative-reference product/waste outputs so each process has
-    one production exchange. Then clone product
-    UUIDs that are shared across multiple processes so the matrix stays
-    square. Elementary flows stay on the process and are attributed to the
-    remaining reference product.
+    Multifunctional background processes are split with allocation
+    (``split_multi_product_processes``). Shared product UUIDs are then cloned
+    so the Brightway matrix stays square. Cross-dimension exchange units
+    (e.g. diesel in btu with mass refUnit) are normalized after merge into the
+    base inventory, where full unit_groups are available.
 
     Keeps openLCA ``isInput`` through cleaning. Immediately before
     ``apply_strategies()``, ``correct_jsonld_input_key`` syncs both ``isInput``
@@ -134,8 +145,8 @@ def clean_JSONLD_background_data(jsonld):
     jsonld = replace_process_location(jsonld)
     # Set all exchange locations to US
     jsonld = replace_exchange_locations(jsonld)
-    # One production exchange per process
-    jsonld = drop_non_reference_product_outputs(jsonld)
+    # One allocated child process per product (same as foreground)
+    jsonld = split_multi_product_processes(jsonld)
     # One unique product UUID per producing process (square Brightway matrix)
     jsonld = clone_shared_production_flows(jsonld)
     # Convert parameters list to dictionary

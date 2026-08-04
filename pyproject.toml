@@ -1,6 +1,6 @@
 [project]
 name = "wmlci"
-version = "1.0.0"
+version = "1.0.0rc1"
 description = "Waste Management Life Cycle Inventory Model Assembler and Calculator"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
@@ -9,8 +9,7 @@ keywords = ["WARM", "waste reduction model", "waste management", "life cycle inv
 authors = [
     { name = "Catherine Birney" },
     { name = "Martin Christie" },
-    { name = "Andrew Beck" },
-    { name = "TBD", email = "XXX" },
+    { name = "Harrison Watson" },
 ]
 
 dependencies = [
