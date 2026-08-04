@@ -494,30 +494,51 @@ def check_for_errors_in_jsonld_import(jsonld):
 
 def validate_jsonld_exchanges(jsonld):
     """
-    Check for exchanges that do not exist in the biosphere data"
-    :param jsonld: 
-    :return: 
-    """""
-    biosphere = bd.Database("biosphere3")
-    valid_ids = {act["id"] for act in biosphere}
-    valid_categories = {"/".join(act["categories"]) for act in biosphere if "categories" in act}
+    Check elementary-flow exchange UUIDs against the importer biosphere snapshot
+    (or biosphere3), and require direction keys after ``correct_jsonld_input_key``.
+
+    Technosphere product/waste flows are skipped for UUID checks — they are not
+    biosphere flows. Call after FEDEFL mapping, technosphere updates, and
+    ``correct_jsonld_input_key`` so fixed issues are not reported.
+
+    Category strings are not compared: openLCA uses paths like
+    ``Elementary Flows/emission/air`` while FEDEFL/Brightway often use
+    ``emission/air`` for the same flow UUID.
+    """
+    if getattr(jsonld, "biosphere_database", None):
+        valid_ids = {
+            b.get("code") or b.get("id")
+            for b in jsonld.biosphere_database
+            if b.get("code") or b.get("id")
+        }
+    else:
+        biosphere = bd.Database("biosphere3")
+        valid_ids = {act["id"] for act in biosphere}
 
     problems = []
     processes = jsonld.data.get("processes", {})
     for process_k, process_v in processes.items():
-        exchanges = process_v.get("exchanges", [])
-        for idx, exchange in enumerate(exchanges):
+        for idx, exchange in enumerate(process_v.get("exchanges", [])):
+            if "amount" not in exchange:
+                problems.append(
+                    f"Process {process_k}, exchange {idx}: Missing required field 'amount'"
+                )
+            if "input" not in exchange and "isInput" not in exchange:
+                problems.append(
+                    f"Process {process_k}, exchange {idx}: Missing required field 'input'/'isInput'"
+                )
+
             flow = exchange.get("flow", {})
+            if not isinstance(flow, dict):
+                continue
+            if flow.get("flowType") != "ELEMENTARY_FLOW":
+                continue
+
             flow_id = flow.get("@id")
-            category = flow.get("category")
             if flow_id and flow_id not in valid_ids:
-                problems.append(f"Process {process_k}, exchange {idx}: Invalid UUID {flow_id}")
-
-            if category and category not in valid_categories:
-                problems.append(f"Process {process_k}, exchange {idx}: Invalid category {category}")
-
-            for field in ["input", "amount", "type"]:
-                if field not in exchange:
-                    problems.append(f"Process {process_k}, exchange {idx}: Missing required field '{field}'")
+                problems.append(
+                    f"Process {process_k}, exchange {idx}: Invalid UUID {flow_id}"
+                    f" ({flow.get('name', '?')})"
+                )
 
     return problems
