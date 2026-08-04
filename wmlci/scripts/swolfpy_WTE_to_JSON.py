@@ -1,3 +1,12 @@
+# This script might have difficulty being run due to package requirement conflicts
+# between flcac_utils and swolfpy
+# The data output of this script has been uploaded to EPA's Data Commmons, so
+# this script does not need to be run
+
+# You can run this if you install an editable local version of flcac_utils
+# https://github.com/FLCAC-admin/flcac-utils
+
+
 import requests as r
 import yaml
 from pathlib import Path
@@ -16,6 +25,7 @@ from flcac_utils.generate_processes import build_flow_dict, \
 from flcac_utils.util import assign_year_to_meta
 from flcac_utils.commons_api import get_single_object
 import copy
+import shutil
 import zipfile
 from pathlib import Path
 # %%
@@ -24,7 +34,8 @@ from pathlib import Path
 PATH_PROJECT = Path(__name__).resolve().parent
 
 PATH_PROJECT = Path(__name__).parent.parent
-OUTPUT_PATH = PATH_PROJECT / "wmlci/data/source_data/swolfpy"
+# Write under source_data/ (unzipped folder is the local artifact)
+OUTPUT_PATH = PATH_PROJECT / "wmlci/data/source_data"
 METHODS_PATH = PATH_PROJECT / "wmlci/methods"
 
 #with open(METHODS_PATH / "v16.yaml" , "r") as f:
@@ -782,6 +793,17 @@ for process_name in id_to_name.keys():
         dq_objs={}, df_params=df_params
     )
     processes.update(p_dict)
+
+# Embed flowType on exchange.flow stubs (needed by remove_impact_free_objects)
+for _proc in processes.values():
+    for _ex in (_proc.exchanges or []):
+        if _ex.flow is None:
+            continue
+        if getattr(_ex.flow, "flow_type", None) is not None:
+            continue
+        _fid = getattr(_ex.flow, "id", None)
+        if _fid in flows and getattr(flows[_fid], "flow_type", None) is not None:
+            _ex.flow.flow_type = flows[_fid].flow_type
 # %%
 import olca_schema as olca
 import olca_schema.zipio as zipio #for writing to json
@@ -847,7 +869,7 @@ def write_objects(name: str,
     # Remove existing json (otherwise it gets extended)
     (out_path / json_file).unlink(missing_ok=True)
     # Create output folder if it doesn't exist
-    out_path.mkdir(parents=False, exist_ok=True)
+    out_path.mkdir(parents=True, exist_ok=True)
     print(f"Writing json to {out_path/json_file}")
     # write flows directly from flow list based on those found in processes
     fedelemflowlist.write_jsonld(flowlist, path=out_path / json_file)
@@ -872,4 +894,14 @@ write_objects(
     actor_objs,
     out_path=OUTPUT_PATH,
 )
+
+# flcac write_objects builds a zip; also unzip to folder for local load
+_zip_path = OUTPUT_PATH / "SwolfPy_WTE_PW_JSON.zip"
+_folder = OUTPUT_PATH / "SwolfPy_WTE_PW_JSON"
+if _folder.exists():
+    shutil.rmtree(_folder)
+_folder.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(_zip_path, "r") as _zf:
+    _zf.extractall(_folder)
+print(f"Wrote JSON-LD folder {_folder}")
 
