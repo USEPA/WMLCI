@@ -16,9 +16,9 @@ Functional unit for all scenarios: **1 US short ton** (907.18474 kg).
 
 | Scenario | v16 (kg CO₂e) | wmlci_pilot (kg CO₂e) | Δ (pilot − v16) | % vs \|v16\| |
 |----------|---------------|------------------------|-----------------|--------------|
-| Landfill (food waste) | 501 | 609 | **+107** | +21%         |
-| Combustion (mixed plastics) | 1,262 | 1,717 | **+455** | +36%         |
-| Recycling (mixed plastics) | −922 | −1,114 | **−192** | −21%        |
+| Landfill (food waste) | 501 | 606 | **+105** | +21% |
+| Combustion (mixed plastics) | 1,262 | 1,669 | **+406** | +32% |
+| Recycling (mixed plastics) | −922 | −1,110 | **−188** | −20% |
 
 In every scenario, pilot has a **larger absolute** score: higher burdens for landfill and combustion, and a larger avoided-burden credit for recycling.
 
@@ -95,7 +95,7 @@ Reasons for differences:
 2. **Avoided electricity credit is much smaller in pilot**
    v16: one national-grid credit **−1,088**.
    Pilot: US electricity baseline disaggregated into many generators; top coal/gas bars are only tens of kg each, and even with “Other” (~−466) the **total electricity offset is substantially less** than −1,088.
-   Net effect: same stack CO₂, less credit → higher GWP (~1,262 → ~1,717).
+   Net effect: same stack CO₂, less credit → higher GWP (~1,262 → ~1,669).
 3. **Transport** remains small in v16 (+3 truck, +9 ash); in pilot those sit in the long tail (“Other”).
 
 Combustion differences are driven primarily by the electricity technosphere update, not by plastic combustion factors.
