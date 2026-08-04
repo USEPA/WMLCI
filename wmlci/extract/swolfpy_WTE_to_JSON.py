@@ -21,14 +21,14 @@ from pathlib import Path
 # %%
 
 # Directory containing this .py file
-PATH_PROJECT = Path(__file__).resolve().parent
+PATH_PROJECT = Path(__name__).resolve().parent
 
-PATH_PROJECT = Path(__file__).parent.parent
-OUTPUT_PATH = PATH_PROJECT / "data/source_data/swolfpy"
-METHODS_PATH = PATH_PROJECT / "methods"
+PATH_PROJECT = Path(__name__).parent.parent
+OUTPUT_PATH = PATH_PROJECT / "wmlci/data/source_data/swolfpy"
+METHODS_PATH = PATH_PROJECT / "wmlci/methods"
 
-with open(METHODS_PATH / "v16.yaml" , "r") as f:
-    config = yaml.safe_load(f)
+#with open(METHODS_PATH / "v16.yaml" , "r") as f:
+#    config = yaml.safe_load(f)
 # %%
 
 
@@ -366,7 +366,7 @@ add_exchange(
 # Zero values are intentionally retained.
 # Only NaN values are skipped.
 tech_map = pd.read_excel(
-    PATH_PROJECT / "utils/flowmapping/SwolfPy_WTE_Tech_flow_map.xlsx"
+    PATH_PROJECT / "wmlci/utils/flowmapping/SwolfPy_WTE_Tech_flow_map.xlsx"
 )
 
 swolfpy_to_uslci = {}
@@ -787,7 +787,7 @@ import olca_schema as olca
 import olca_schema.zipio as zipio #for writing to json
 from datetime import datetime, time
 
-outPath = Path(__file__).parents[1] / 'output'
+outPath = Path.cwd() / 'output'
 
 def _write_obj(
         file: str,

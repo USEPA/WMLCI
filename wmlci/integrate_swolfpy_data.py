@@ -12,21 +12,31 @@ import zipfile
 
 from copy import deepcopy
 
+import shutil
+
 from collections import deque
 
 from wmlci.log import log
 # %%
 
+# Create JSON file for updating air emissions of mixed plastic combustion
+PATH_PROJECT = Path.cwd() # source directory
+source_folder = PATH_PROJECT / "wmlci/data/source_data/waste_reduction_model_v16_pilot" # source folder to copy
+destination_folder = PATH_PROJECT / "wmlci/data/source_data/waste_reduction_model_v16_pilot_w_swolfpy" # new folder name
+
+# Check if folder already exists; if not create folder
+if destination_folder.exists():
+    print(f"Folder already exists: {destination_folder}")
+else:
+    shutil.copytree(source_folder, destination_folder)
+    print(f"Copied folder to: {destination_folder}")
 
 # Import WARM v16 JSON file
-json_ld = load_JSONLD_sourceData('waste_reduction_model_v16', datatype="jsonld", bw_database_name='db')
-
+json_ld = load_JSONLD_sourceData('waste_reduction_model_v16_pilot_w_swolfpy', datatype="jsonld", bw_database_name='db')
 
 # %%
 
-
 # swolfpy data paths
-PATH_PROJECT = Path.cwd()
 swolfpy_path = PATH_PROJECT / "data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
 unzip_to_folder = (
     PATH_PROJECT
@@ -38,7 +48,7 @@ print("cwd =", Path.cwd())
 
 print("PATH_PROJECT =", PATH_PROJECT)
 
-swolfpy_path = PATH_PROJECT / "data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
+swolfpy_path = PATH_PROJECT / "wmlci/data/source_data/swolfpy/SwolfPy_WTE_PW_JSON.zip"
 
 print("swolfpy_path =", swolfpy_path)
 

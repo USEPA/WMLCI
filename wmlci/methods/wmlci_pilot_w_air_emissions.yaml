@@ -11,13 +11,13 @@
 #   b) recycling + plastic
 #   c) organics + landfill
 
-method_name: wmlci_pilot
-bw_project_name: wmlci_pilot
+method_name: wmlci_pilot_w_air_emissions
+bw_project_name: wmlci_pilot_w_air_emissions
 
-inventory_source: waste_reduction_model_v16_pilot #TODO: upate to new jsonld with the swolfpy data appended
+inventory_source: waste_reduction_model_v16_pilot_w_swolfpy # new json file with swolfpy data
 inventory_database: openlca_db
 
-lcia_input: ipcc_gwp # TODO: UPDATE TO TRACI_2_2
+lcia_input: TRACI_2_2 # TODO: UPDATE TO TRACI_2_2
 lcia_input_version: 1.2024-12.0
 lcia_db_name: IPCC
 
