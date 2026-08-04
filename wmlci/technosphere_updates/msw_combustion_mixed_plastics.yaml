@@ -8,7 +8,7 @@ technosphere_exchanges:
     data_source: us_electricity_baseline
     data_version: 1.2026-06.0
     product: "Electricity, AC, 120 V"
-    process: "Electricity; at user; consumption mix - US - US"
+    process: "Electricity; at user; residual consumption mix - US - US"
 
 # technosphere_exchange_drops:
 #   - "XXX"
