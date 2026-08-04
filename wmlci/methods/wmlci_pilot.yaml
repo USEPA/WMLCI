@@ -51,5 +51,6 @@ processes:
     technosphere_updates: msw_recycling_mixed_plastics
 
 output_files:
-  summary_csv: wmlci_pilot_lcia_results.csv
+  summary_csv: wmlci_pilot_lcia_results_summary.csv
   detail_csv: wmlci_pilot_lcia_results_detailed.csv
+  characterized_inventory_csv: wmlci_pilot_lcia_results_characterized_inventory.csv

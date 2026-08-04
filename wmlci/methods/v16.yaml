@@ -36,5 +36,6 @@ processes:
   "MSW recycling of Mixed Plastics": null
 
 output_files:
-  summary_csv: v16_lcia_results.csv
+  summary_csv: v16_lcia_results_summary.csv
   detail_csv: v16_lcia_results_detailed.csv
+  characterized_inventory_csv: v16_lcia_results_characterized_inventory.csv

@@ -43,6 +43,21 @@ DETAIL_COLUMNS = [
     "method",
 ]
 
+CHARACTERIZED_COLUMNS = [
+    "process",
+    "reference_product",
+    "functional_unit",
+    "location",
+    "elementary_flow",
+    "categories",
+    "inventory_amount",
+    "inventory_unit",
+    "characterized_amount",
+    "characterized_unit",
+    "characterized_share",
+    "method",
+]
+
 METHOD_UNIT = "kg CO2e"
 
 
@@ -141,13 +156,14 @@ def build_process_meta(db) -> dict:
 
 
 def calculate_lca_results(db, processes, config: dict[str, Any]):
-    """Run LCA for each configured process scenario; return summary and detail DataFrames."""
+    """Run LCA for each configured process scenario; return summary, detail, and flow dfs."""
     method = tuple(config["lcia_method"])
     # IPCC GWP methods are kg CO2 equivalents
     process_meta = build_process_meta(db)
 
     results = []        # one row per scenario (summary)
     detail_rows = []    # one row per activity within each scenario (detailed)
+    flow_rows = []      # one row per elementary flow within each scenario
 
     for activity, product, process_settings in processes:
         # Functional unit: demand passed to Brightway in reference-product units (kg).
@@ -223,22 +239,73 @@ def calculate_lca_results(db, processes, config: dict[str, Any]):
                 "method": str(method),
             })
 
-    return pd.DataFrame(results), pd.DataFrame(detail_rows, columns=DETAIL_COLUMNS)
+        # elementary-flow inventory + characterized contribution to the scenario score
+        inv = lca.inventory  # biosphere flows x processes
+        inv_by_flow = np.asarray(inv.sum(axis=1)).ravel()
+        ci_by_flow = np.asarray(ci.sum(axis=1)).ravel()
+        for flow_idx in np.argsort(np.abs(ci_by_flow))[::-1]:
+            inv_amt = float(inv_by_flow[flow_idx])
+            char_amt = float(ci_by_flow[flow_idx])
+            if abs(inv_amt) < 1e-12 and abs(char_amt) < 1e-12:
+                continue
+            flow = bd.get_activity(lca.dicts.biosphere.reversed[flow_idx])
+            cats = flow.get("categories") or ()
+            if isinstance(cats, (list, tuple)):
+                cats_label = "::".join(str(c) for c in cats)
+            else:
+                cats_label = str(cats) if cats else ""
+            flow_rows.append({
+                "process": activity["name"],
+                "reference_product": product.get("name", ""),
+                "functional_unit": fu_label,
+                "location": activity.get("location", ""),
+                "elementary_flow": flow.get("name", ""),
+                "categories": cats_label,
+                "inventory_amount": inv_amt,
+                "inventory_unit": flow.get("unit", ""),
+                "characterized_amount": char_amt,
+                "characterized_unit": METHOD_UNIT,
+                "characterized_share": (
+                    char_amt / score if score not in (0, None) else float("nan")
+                ),
+                "method": str(method),
+            })
+
+    return (
+        pd.DataFrame(results),
+        pd.DataFrame(detail_rows, columns=DETAIL_COLUMNS),
+        pd.DataFrame(flow_rows, columns=CHARACTERIZED_COLUMNS),
+    )
 
 
-def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str, str]:
-    """Write summary and detail CSVs; return output paths."""
+def write_lca_outputs(
+    results_df,
+    detail_df,
+    characterized_df,
+    config: dict[str, Any],
+) -> dict[str, str]:
+    """Write summary, detail, and characterized-inventory CSVs; return paths."""
     out = config.get("output_files", {})
-    summary_name = out.get("summary_csv", "lcia_results_summary.csv")
-    detail_name = out.get("detail_csv", "lcia_results_detail.csv")
+    summary_name = versioned_filename(
+        out.get("summary_csv", "lcia_results_summary.csv")
+    )
+    detail_name = versioned_filename(
+        out.get("detail_csv", "lcia_results_detail.csv")
+    )
+    char_name = versioned_filename(
+        out.get(
+            "characterized_inventory_csv",
+            "lcia_results_characterized_inventory.csv",
+        )
+    )
 
     results_path = resultspath / summary_name
     detail_path = resultspath / detail_name
+    char_path = resultspath / char_name
 
-    # write the scenario-level summary to CSV
     results_df.to_csv(results_path, index=False)
-    # write individual activity results for all scenarios to csv
     detail_df.to_csv(detail_path, index=False)
+    characterized_df.to_csv(char_path, index=False)
 
     log.info(
         f"Summary for {len(results_df)} scenarios written to {results_path}"
@@ -248,5 +315,13 @@ def write_lca_outputs(results_df, detail_df, config: dict[str, Any]) -> dict[str
         f"{detail_df['process'].nunique() if len(detail_df) else 0} processes) "
         f"written to {detail_path}"
     )
+    log.info(
+        f"Characterized inventory ({len(characterized_df)} elementary-flow rows) "
+        f"written to {char_path}"
+    )
 
-    return {"summary": str(results_path), "detail": str(detail_path)}
+    return {
+        "summary": str(results_path),
+        "detail": str(detail_path),
+        "characterized_inventory": str(char_path),
+    }
