@@ -1,0 +1,60 @@
+# Updated Waste Reduction Model v16 excel tool data inputs.
+# Changes include:
+#   - Most recent IPCC data for GWP (AR6-100)
+#   - Non-truncated transportation data
+#   - Improved electricity
+#   - Improved plastics recycling
+#   - Add SwolfPy air emissions data
+
+# Models 3 material-pathway combinations:
+#   a) incineration + plastic
+#   b) recycling + plastic
+#   c) organics + landfill
+
+method_name: wmlci_pilot
+bw_project_name: wmlci_pilot
+
+inventory_source: waste_reduction_model_v16_pilot #TODO: upate to new jsonld with the swolfpy data appended
+inventory_database: openlca_db
+
+lcia_input: ipcc_gwp # TODO: UPDATE TO TRACI_2_2
+lcia_input_version: 1.2024-12.0
+lcia_db_name: IPCC
+
+lcia_method:
+  - IPCC
+  - AR6-100
+
+model_defaults:
+  functional_unit:
+    amount: 907.18474  # one US short ton
+    unit: kilogram
+
+global_parameter_overrides:
+  transport_distance_landfilling: 20
+  transport_distance_combustion: 20
+  transport_distance_recycling: 20
+
+  # Mix shares for Mixed Plastics (same as global_defaults, documented for clarity)
+  pet_in_mixed_plastics: 0.602564102564103
+  hdpe_in_mixed_plastics: 0.397435897435897
+
+process_parameter_overrides:
+    # Used for Mixed Plastics (same as global_defaults, documented for clarity)
+  "MSW recycling of HDPE":
+    recovered_material: 0.762660158633
+  "MSW recycling of PET":
+    recovered_material: 0.771724031486
+
+processes:
+  "MSW landfilling of Food Waste; National average LFG recovery, typical collection, National average conditions":
+    technosphere_updates: msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg
+  "MSW combustion of Mixed Plastics":
+    technosphere_updates: msw_combustion_mixed_plastics_w_air_emissions
+  "MSW recycling of Mixed Plastics":
+  # TODO: determine if FLCAC datasets appear to stop at plant. WARM includes transport of manufactured products, to retailer.
+    technosphere_updates: msw_recycling_mixed_plastics
+
+output_files:
+  summary_csv: wmlci_pilot_w_air_emissions_lcia_results.csv
+  detail_csv: wmlci_pilot_w_air_emissions_lcia_results_detailed.csv
