@@ -147,7 +147,7 @@ def _save(fig, savepath: str | Path | None):
     if savepath is not None:
         path = Path(savepath)
         path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, bbox_inches="tight", dpi=150)
+        fig.savefig(path, bbox_inches="tight", format=path.suffix.lstrip(".") or None)
     return fig
 
 

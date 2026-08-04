@@ -28,7 +28,7 @@ In every scenario, pilot has a **larger absolute** score: higher burdens for lan
 
 **Figure 1.** Scenario GWP scores (`v16` vs `wmlci_pilot`).
 
-![Figure 1. Scenario GWP scores](graphics/scenario_scores_v16_vs_wmlci_pilot.png)
+![Figure 1. Scenario GWP scores](graphics/scenario_scores_v16_vs_wmlci_pilot.svg)
 
 - Grouped bars of total GWP for each scenario under `v16` vs `wmlci_pilot`.
 - Positive = net GHG burden; negative = net credit (typical of recycling with virgin material displacement).
@@ -42,7 +42,7 @@ In every scenario, pilot has a **larger absolute** score: higher burdens for lan
 
 **Figure 2.** Scenario GWP by contributing flow (CO₂ / CH₄ / N₂O / Other), in kg CO₂e.
 
-![Figure 2. Scenario GWP by contributing flow](graphics/scenario_by_flow_v16_vs_wmlci_pilot.png)
+![Figure 2. Scenario GWP by contributing flow](graphics/scenario_by_flow_v16_vs_wmlci_pilot.svg)
 
 - Same scenario totals as Figure 1, split by emission types group (CO₂ / CH₄ / N₂O / Other).
 - Groups defined by `characterized_flow_groups` in the method YAMLs.
@@ -60,7 +60,7 @@ If there are fewer than 5 contributors shown, or no "Other" than all data is cap
 
 **Figure 3.** Top contributors — landfill (food waste).
 
-![Figure 3. Landfill top contributors](graphics/top_contributors_landfill_food_waste_v16_vs_wmlci_pilot.png)
+![Figure 3. Landfill top contributors](graphics/top_contributors_landfill_food_waste_v16_vs_wmlci_pilot.svg)
 
 - Per-model top activities by |contribution|, plus an “Other” residual for aggregated activities outside the top 5.
 - Activity names do not align 1:1 across models (provider swaps + disaggregation).
@@ -84,7 +84,7 @@ Reasons for differences:
 
 **Figure 4.** Top contributors — combustion (mixed plastics).
 
-![Figure 4. Combustion top contributors](graphics/top_contributors_combustion_mixed_plastics_v16_vs_wmlci_pilot.png)
+![Figure 4. Combustion top contributors](graphics/top_contributors_combustion_mixed_plastics_v16_vs_wmlci_pilot.svg)
 
 - Stack CO₂ from PET/HDPE combustion vs avoided electricity from energy recovery (and minor transport).
 
@@ -106,7 +106,7 @@ Combustion differences are driven primarily by the electricity technosphere upda
 
 **Figure 5.** Top contributors — recycling (mixed plastics).
 
-![Figure 5. Recycling top contributors](graphics/top_contributors_recycling_mixed_plastics_v16_vs_wmlci_pilot.png)
+![Figure 5. Recycling top contributors](graphics/top_contributors_recycling_mixed_plastics_v16_vs_wmlci_pilot.svg)
 
 - Net credit from displacing virgin plastic production with recycled material pathways.
 - v16 activities are Waste Reduction Model “process energy” / “product manufacturing” aggregates.
