@@ -13,7 +13,7 @@ technosphere_exchanges:
     data_source: uslci
     data_version: 1.2026-06.0
     product: "Quicklime; at plant"
-    process: "Quicklime, at plant"
+    process: "Quicklime; at plant"
   Ammonia; steam reforming, liquid; at plant: # this is from USLCI; adding to ensure all aspects of replacement are executed
     data_source: uslci
     data_version: 1.2026-06.0
