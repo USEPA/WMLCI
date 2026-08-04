@@ -19,6 +19,8 @@ inventory_database: openlca_db
 lcia_input: ipcc_gwp
 lcia_input_version: 1.2024-12.0
 lcia_db_name: IPCC
+fedelemflowlist_source: IPCC
+lcia_unit: kg CO2e
 
 lcia_method:
   - IPCC
@@ -54,3 +56,16 @@ output_files:
   summary_csv: wmlci_pilot_lcia_results_summary.csv
   detail_csv: wmlci_pilot_lcia_results_detailed.csv
   characterized_inventory_csv: wmlci_pilot_lcia_results_characterized_inventory.csv
+
+# Optional, only required for graphics
+lcia_label: GWP (AR6-100)
+# Plot grouping for characterized flows
+characterized_flow_groups:
+  CO2:
+    - carbon dioxide
+  CH4:
+    - methane
+    - ch4
+  N2O:
+    - nitrous oxide
+    - n2o
