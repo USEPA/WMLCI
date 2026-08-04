@@ -9,21 +9,6 @@ technosphere_exchanges:
     data_version: 1.2026-06.0
     product: "Electricity, AC, 120 V"
     process: "Electricity; at user; consumption mix - US - US"
-  Hydrated lime; at plant: # this is a flow, not a process
-    data_source: uslci
-    data_version: 1.2026-06.0
-    product: "Quicklime; at plant"
-    process: "Quicklime, at plant"
-  Ammonia; steam reforming, liquid; at plant: # this is from USLCI; adding to ensure all aspects of replacement are executed
-    data_source: uslci
-    data_version: 1.2026-06.0
-    product: "Ammonia; steam reforming, liquid; at plant"
-    process: "Ammonia; steam reforming, liquid; at plant"
-  Charcoal; at plant: # this is a flow, not a process
-    data_source: uslci
-    data_version: 1.2026-06.0
-    product: "Granular activated carbon; at plant"
-    process: "Granular activated carbon production; at plant - PROXY"
 
 # technosphere_exchange_drops:
 #   - "XXX"
