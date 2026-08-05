@@ -1,3 +1,7 @@
+<!-- badges: start -->
+[![DOI](https://zenodo.org/badge/974410280.svg)](https://doi.org/10.5281/zenodo.21802243)
+<!-- badges: end -->
+
 # Waste Management Life Cycle Inventory Model Assembler and Calculator (WMLCI)
 
 WMLCI is being developed to update the US Environmental Protection Agency's (USEPA) approach to generating the Waste Reduction Model Excel tool. This revised approach is intended to provide users with a transparent model that is reproducible, editable, and quickly updatable as new data sources are released.
