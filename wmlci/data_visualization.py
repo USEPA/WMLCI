@@ -252,6 +252,7 @@ def plot_scenario_scores(
         if len(set(labels)) == 1
         else "Scenario impacts"
     )
+    scenarios = sorted(plot_df["scenario"].unique())
 
     sns.set_style("whitegrid")
     fig, ax = plt.subplots(figsize=(9, 5.5))
@@ -263,6 +264,7 @@ def plot_scenario_scores(
         palette=_MODEL_COLORS[: plot_df["model"].nunique()],
         saturation=1,
         ax=ax,
+        order=scenarios,
     )
     ax.set_ylabel(f"Impact ({unit})")
     ax.set_xlabel("")
@@ -441,7 +443,7 @@ def plot_top_contributors_all_scenarios(
     """
     res = _as_results(method)
     detail = res["detail"]
-    processes = list(dict.fromkeys(res["summary"]["process"].tolist()))
+    processes = sorted(res["summary"]["process"].unique())
     if not processes:
         raise ValueError(f"No scenarios in summary for '{res['method_name']}'")
 
@@ -608,7 +610,7 @@ def plot_scenario_by_flow(
     unit = units.pop() if len(units) == 1 else "impact"
     impact = labels[0] if len(set(labels)) == 1 else "Impact"
     models = list(dict.fromkeys(plot_df["model"].tolist()))
-    scenarios = list(dict.fromkeys(plot_df["scenario"].tolist()))
+    scenarios = sorted(plot_df["scenario"].unique())
     palette = _palette_for_flows(flow_order)
 
     sns.set_style("whitegrid")
