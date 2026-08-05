@@ -30,18 +30,20 @@ Running the methods will download and unzip any necessary raw data to a user's l
 | [`us_electricity_baseline.yaml`](../wmlci/extract/us_electricity_baseline.yaml) | FLCAC | [US Electricity Baseline](https://www.lcacommons.gov/lca-collaboration/Federal_LCA_Commons/US_electricity_baseline/datasets) | Regional US grid electricity generation inventories                                                                                                                           |
 | [`heavy_equipment_operation.yaml`](../wmlci/extract/heavy_equipment_operation.yaml) | FLCAC | [Heavy Equipment Operation](https://www.lcacommons.gov/lca-collaboration/US_Environmental_Protection_Agency/Heavy_equipment_operation/datasets) | EPA heavy-equipment / diesel operation processes (e.g. landfill diesel)                                                                                                       |
 | [`waste_reduction_model_v16_pilot.yaml`](../wmlci/extract/waste_reduction_model_v16_pilot.yaml) | EPA Data Commons (derived) | [WMLCI sourceData](https://dmap-data-commons-ord.s3.amazonaws.com/index.html#WMLCI/sourceData/) | Downloads `waste_reduction_model_v16.zip` and subsets inventory for the three material–pathway scenarios via [`edit_original_v16_model`](../wmlci/edit_original_v16_model.py) |
+| [`waste_reduction_model_v16_pilot_w_swolfpy.yaml`](../wmlci/extract/waste_reduction_model_v16_pilot_w_swolfpy.yaml) | EPA Data Commons (derived) / [SwolfPy](https://swolfpy-project.github.io/) | [WMLCI sourceData](https://dmap-data-commons-ord.s3.amazonaws.com/index.html#WMLCI/sourceData/) (`SwolfPy_WTE_PW_JSON.zip`) | Integrates [SwolfPy](https://github.com/SwolfPy-Project/swolfpy) waste-to-energy (WTE) combustion inventory into the v16 pilot JSON-LD via [`integrate_swolfpy_data`](../wmlci/integrate_swolfpy_data.py) |
 
 Please note that there are on-going improvements being made to these methods.
 
 ## Generating WMLCI Model Results
 
-To run our existing methods:
+To run existing methods:
 
 ```python
 from wmlci.lca import run_bw_lca
 
 run_bw_lca("v16")
 run_bw_lca("wmlci_pilot")
+run_bw_lca("wmlci_pilot_smog")
 ```
 
 ---
@@ -97,3 +99,61 @@ This method builds off the original v16 Waste Reduction Model openLCA data and i
   - [`uslci.yaml`](../wmlci/extract/uslci.yaml)
   - [`us_electricity_baseline.yaml`](../wmlci/extract/us_electricity_baseline.yaml)
   - [`heavy_equipment_operation.yaml`](../wmlci/extract/heavy_equipment_operation.yaml) (landfilling)
+
+---
+
+### wmlci_pilot_smog
+
+This method takes a similar approach `wmlci_pilot`, in that this method builds off `waste_reduction_model_v16_pilot.yaml`. 
+However, this model assesses TRACI 2.2 smog, rather than GWP. 
+
+As the Waste Reduction Model does not evaluate smog, the model data was updated by integrating data from additional sources.
+
+1. Integrate [SwolfPy](https://swolfpy-project.github.io/) waste-to-energy (WTE) air emission inventory for mixed-plastics combustion
+2. Applying TRACI 2.2 Smog formation LCIA (kg O₃ eq) rather than IPCC GWP
+3. Includes the FLCAC technosphere updates for transport, electricity, and plastics recycling / manufacturing defined in `wmlci_pilot`
+4. Incorporates additional FLCAC technosphere updates that are not included in `wmlci_pilot` (lime / ammonia / activated carbon)
+
+**Inventory base:** Waste Reduction Model v16 openLCA data combined with SwolfPy WTE JSON-LD via [`waste_reduction_model_v16_pilot_w_swolfpy.yaml`](../wmlci/extract/waste_reduction_model_v16_pilot_w_swolfpy.yaml) ([`integrate_swolfpy_data`](../wmlci/integrate_swolfpy_data.py)).
+
+**Config:** [`wmlci_pilot_smog.yaml`](../wmlci/methods/wmlci_pilot_smog.yaml)
+
+- LCIA: [`traci_2_2`](../wmlci/extract/traci_2_2.yaml) method for `Smog formation`
+- Functional unit: 1 US short ton
+- Same three material–pathway scenarios as `v16` / `wmlci_pilot`
+- Background data updates/replacements:
+  - [`msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg.yaml`](../wmlci/technosphere_updates/msw_landfilling_fw_LfgNtlAvg_CollecTyp_CondNtlAvg.yaml)
+  - [`msw_combustion_mixed_plastics_w_air_emissions.yaml`](../wmlci/technosphere_updates/msw_combustion_mixed_plastics_w_air_emissions.yaml)
+  - [`msw_recycling_mixed_plastics.yaml`](../wmlci/technosphere_updates/msw_recycling_mixed_plastics.yaml)
+- Secondary sources pulled in by those updates (via [`extract/`](../wmlci/extract/)):
+  - [`uslci.yaml`](../wmlci/extract/uslci.yaml)
+  - [`us_electricity_baseline.yaml`](../wmlci/extract/us_electricity_baseline.yaml)
+  - [`heavy_equipment_operation.yaml`](../wmlci/extract/heavy_equipment_operation.yaml)
+  - [`waste_reduction_model_v16_pilot_w_swolfpy.yaml`](../wmlci/extract/waste_reduction_model_v16_pilot_w_swolfpy.yaml) 
+
+
+---
+
+## Future Method Considerations
+
+### SwolfPy flows without TRACI 2.2 characterization factors
+
+Two SwolfPy emission mappings do not align with TRACI 2.2 mappings and therefore do not contribute to TRACI impact scores:
+
+| Flow | UUID |
+|------|------|
+| Chlorinated dioxins and furans -- 2,3,7,8 congeners only | `16c208f1-371c-3e27-a0ca-ee18b01d862e` |
+| Hydrocarbons | `6a8ca31c-ede5-38b1-8c30-2d50fb499a55` |
+
+### Scope of plastics manufacturing transport
+
+v16 includes transport of manufactured products to retailer (497 miles). 
+USLCI resin and pellet data generally represent manufacturing to the plant gate. 
+`wmlci_pilot` does not add a separate retail-transport step on top of the USLCI replacements.
+
+### Ash transport from combustion
+
+Ash handling was not updated in the `wmlci_pilot` methods the Waste Reduction Model v16 openLCA methodology. 
+In v16, ash transport assumes:  
+- 1 short ton of ash transported to landfill per 1 short ton of combusted material.  
+- The modeled transportation distance is unclear.
