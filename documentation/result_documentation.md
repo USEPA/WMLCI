@@ -1,17 +1,17 @@
 # Result documentation
 
 This page describes model result graphics for the LCA methods.
-Methods details are in [`method_and_data_documentation.md`](data_and_method_documentation).
+Methods details are in [`data_and_method_documentation.md`](data_and_method_documentation.md).
 
-This document compare the GWP results for methods `v16` vs `wmlci_pilot`. 
+This document compares the Global Warming Potential (GWP) results for methods `v16` vs `wmlci_pilot`. 
 It also evaluates the results of the smog LCIA. 
 
 ## GWP comparison: v16 vs wmlci_pilot
 
 Differences in GWP results between the two methods are due to:
 
-1) **Inventory updates** updated FLCAC data in the `wmlci_pilot` method
-2) **LCIA updates** `v16` is calculated using IPCC AR4-100, while `wmlci_pilot` is built on AR6-100
+1) **Inventory updates** updated Federal LCA Commons (FLCAC) data in the `wmlci_pilot` method
+2) **LCIA updates** `v16` is calculated using IPCC AR4-100 for GWP, while `wmlci_pilot` is built on AR6-100
 
 Functional unit for all scenarios: **1 US short ton** (907.18474 kg).
 
@@ -36,10 +36,10 @@ In every scenario, pilot has a **larger absolute** score: higher burdens for lan
 ![Figure 1. Scenario GWP scores](graphics/scenario_scores_v16_vs_wmlci_pilot.svg)
 
 - Grouped bars of total GWP for each scenario under `v16` vs `wmlci_pilot`.
-- Positive = net GHG burden; negative = net credit (typical of recycling with virgin material displacement).
+- Positive = net GHG burden; negative = net credit (typical of recycling with virgin material displacement and possible with energy recovery in landfill and combustion).
 - Values change across methods due to:
   1. Updated GWP factors — AR4-100 vs AR6-100
-  2. Updated background providers — pilot replaces Waste Reduction Model v16 transport, electricity, landfill diesel, and plastics manufacturing with FLCAC datasets (see method doc).
+  2. Updated background providers — pilot replaces Waste Reduction Model v16 transport, electricity, landfill diesel, and plastics (virgin and recycled) manufacturing with FLCAC datasets (see method doc).
 
 ---
 
@@ -77,10 +77,10 @@ Reasons for differences:
 1. **Foreground landfill process rises (~542 → ~619)**
    Fugitive CH₄ is still the main contributor.
    Characterized CH₄ inventory mass is ~26 kg in both runs; applying GWP 25 vs ~29.8 moves CH₄ from ~659 to ~734 kg CO₂e.
-   That alone accounts for most of the landfill delta.
+   That alone accounts for most of the landfill change. This can be attributed to the higher GWP characterization factor for landfill methane when using AR6 instead of AR4.
 2. **Electricity credit shrinks**
    v16 uses a single Waste Reduction Model process “Electricity generation, at grid, National” (−61).
-   Pilot swaps to FLCAC US electricity baseline, which appears as many regional/fuel activities (e.g. MISO coal, PJM gas) with a **much smaller net credit** on the top bars (−4 / −3) plus Other.
+   Pilot swaps to FLCAC US electricity baseline, which appears as many regional/fuel activities (e.g. MISO coal, PJM gas) with a **much smaller net credit** on the top bars (−4 / −3) plus Other. This reflects using updated electricity data that takes into account recent grid decarbonization.
 3. **Diesel / transport providers renamed but similar magnitude**
    “Landfill operation, diesel” → heavy-equipment diesel (~17 → ~18); MSW truck → USLCI short-haul (~3 in both).
    These are not the main score drivers.
@@ -101,8 +101,8 @@ Reasons for differences:
    PET (~1,228) and HDPE (~1,110) match in both models — GWP 1 in both models.
 2. **Avoided electricity credit is much smaller in pilot**
    v16: one national-grid credit **−1,088**.
-   Pilot: US electricity baseline disaggregated into many generators; top coal/gas bars are only tens of kg each, and even with “Other” (~−466) the **total electricity offset is substantially less** than −1,088.
-   Net effect: same stack CO₂, less credit → higher GWP (~1,262 → ~1,669).
+   Pilot: US electricity baseline disaggregated into many generators; top coal/gas bars are only tens of kg each, and even with “Other” (~−510) the **total electricity offset is substantially less** than −1,088.
+   Net effect: same stack CO₂, less credit → higher GWP (~1,262 → ~1,669). This reflects using updated electricity data that takes into account recent grid decarbonization.
 3. **Transport** remains small in v16 (+3 truck, +9 ash); in pilot those sit in the long tail (“Other”).
 
 Combustion differences are driven primarily by the electricity technosphere update, not by plastic combustion factors.
@@ -123,23 +123,26 @@ Reasons for differences:
 
 1. **Manufacturing provider swap**
    Virgin and recycled PET/HDPE manufacturing are replaced with USLCI resin/pellet datasets.
-   Contribution charts therefore show chemical/energy supply chains instead of Waste Reduction Model process-energy buckets.
-2. **Net CO₂ credit increases** (−800 → −990 characterized)
+   Contribution charts therefore show chemical/energy supply chains instead of Waste Reduction Model process-energy buckets. In the latest FLCAC data there are lower impacts for PET recycling. Virgin HDPE impacts are also higher in the latest FLCAC data, which leads to greater credit. 
+2. **Net CO₂ credit increases** (−800 → −987 characterized)
    Updated virgin-displacement burdens (and recycled pathway burdens) do not cancel the same way as in Waste Reduction Model aggregates.
-3. **MSW truck transport dropped** in the recycling update YAML (collection treated as already in recycled FLCAC datasets) — small vs manufacturing, but intentional scope change.
-4. **AR6 factors** also rescale CH₄/N₂O portions of the credit (pilot shows a visible N₂O credit; v16 N₂O ~0 in the characterized rollup).
+3**AR6 factors** also rescale CH₄/N₂O portions of the credit (pilot shows a visible N₂O credit; v16 N₂O ~0 in the characterized rollup).
 
 ---
 
 ## Smog LCIA Results
 
-TRACI 2.2 smog formation results for the `wmlci_pilot_smog` method (same three scenarios; functional unit **1 US short ton**). There is no v16 comparison for this indicator.
+TRACI 2.2 smog formation results for the `wmlci_pilot_smog` method, where the functional unit is 1 US short ton. 
+There is no v16 comparison for this indicator, as the v16 Waste Reduction Model does not evaluate smog.
 
 | Scenario | Smog (kg O₃ eq) |
 |----------|----------------:|
-| Landfill (food waste) |             1.5 |
-| Combustion (mixed plastics) |            −6.0 |
-| Recycling (mixed plastics) |           −56.8 |
+| Landfill (food waste) |             1.4 |
+| Combustion (mixed plastics) |            −7.5 |
+| Recycling (mixed plastics) |           −56.7 |
+
+Note that negative values are avoided-burden credits. 
+Combustion credits displace grid electricity, while recycling credits displace virgin PET/HDPE manufacturing.
 
 ### Scenario smog scores
 
@@ -165,5 +168,5 @@ TRACI 2.2 smog formation results for the `wmlci_pilot_smog` method (same three s
 
 ![Figure 8. Smog top contributors](graphics/top_contributors_wmlci_pilot_smog.svg)
 
-- One panel per scenario: top 5 activities by |contribution|, plus an “Other” residual for the long tail, and a **Total** bar (green) for the scenario score.
+- One panel per scenario: top 5 activities by |contribution|, plus an “Other” residual for the long tail, and a **Total** bar (green) for the scenario impact.
 - Activity names differ across scenarios (foreground waste process vs electricity generators vs plastics manufacturing).
