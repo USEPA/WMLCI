@@ -20,23 +20,23 @@ from wmlci.settings import find_versioned_file, resultspath
 OTHER_LABEL = "Other"
 TOTAL_LABEL = "Total"
 
-# Okabe–Ito subset (light orange for second model)
 _BLUE = "#0072B2"
 _ORANGE = "#F5C16C"
 _GREEN = "#009E73"
 _PURPLE = "#CC79A7"
 _YELLOW = "#E69F00"
 _SKY = "#56B4E9"
+_VERMILION = "#D55E00"
 _MODEL_COLORS = [_BLUE, _ORANGE]
-_FLOW_PALETTE = [_BLUE, _ORANGE, _GREEN, _PURPLE, _YELLOW, _SKY]
+_FLOW_PALETTE = [_BLUE, _ORANGE, _GREEN, _PURPLE, _YELLOW, _SKY, _VERMILION]
 _TOTAL_COLOR = _GREEN
 _KNOWN_FLOW_COLORS = {
     "CO2": _BLUE,
     "CH4": _ORANGE,
     "N2O": _GREEN,
-    "NOx": _BLUE,
-    "VOC": _ORANGE,
-    "CO": _YELLOW,
+    "NOx": _SKY,
+    "VOC": _YELLOW,
+    "CO": _VERMILION,
     OTHER_LABEL: _PURPLE,
 }
 
