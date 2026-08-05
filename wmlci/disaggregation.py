@@ -149,10 +149,6 @@ def validate_allocation_factors_for_process(
         return True
 
     if _is_burden_free_byproduct_case(values, tolerance):
-        log.info(
-            f"Process '{process.get('name', '<unnamed>')}' "
-            f"uses burden-free byproduct allocation under {allocation_method}"
-        )
         return True
 
     return False
@@ -165,10 +161,12 @@ def validate_allocation_factors_globally(
     Global gate: validate all multifunctional processes before splitting.
     - Resolves best method via priority PHYSICAL -> ECONOMIC -> CAUSAL.
     - Overrides process['defaultAllocationMethod'] when the resolved method differs.
-    - Logs method overrides and validation warnings.
+    - Logs a summary of method overrides and burden-free byproduct cases.
     - Returns False (abort) only if no valid method can be found for a multifunctional process.
     """
     process_map: Dict[str, Dict] = importer.data.get("processes", {})
+    n_overrides = 0
+    n_burden_free = 0
 
     for process_id, process in process_map.items():
         products = get_product_exchanges(process)
@@ -177,9 +175,9 @@ def validate_allocation_factors_globally(
 
         default_method = process.get("defaultAllocationMethod")
         resolved_method = resolve_allocation_method_with_priority(process, tolerance)
+        process_name = process.get("name", "<unnamed>")
 
         if resolved_method is None:
-            process_name = process.get("name", "<unnamed>")
             log.info(
                 f"Global allocation validation failed: no valid method found "
                 f"for process {process_name} ({process_id}); default={default_method}"
@@ -188,19 +186,38 @@ def validate_allocation_factors_globally(
 
         if resolved_method != default_method:
             process["defaultAllocationMethod"] = resolved_method
-            log.info(
-                f"Allocation method override: process '{process.get('name','<unnamed>')}' "
-                f"({process_id}) default '{default_method}' → '{resolved_method}'"
-            )
+            n_overrides += 1
 
         # Validate under resolved method (now set as default)
-        if not validate_allocation_factors_for_process(process, tolerance, allocation_method=resolved_method):
-            process_name = process.get("name", "<unnamed>")
+        if not validate_allocation_factors_for_process(
+            process, tolerance, allocation_method=resolved_method
+        ):
             log.info(
                 f"Global allocation validation failed under method '{resolved_method}' "
                 f"for process {process_name} ({process_id})"
             )
             return False
+
+        values = _collect_allocation_values_for_method(
+            process, resolved_method, products
+        )
+        if values is not None and _is_burden_free_byproduct_case(values, tolerance):
+            n_burden_free += 1
+
+    if n_overrides or n_burden_free:
+        parts = []
+        if n_overrides:
+            parts.append(
+                f"{n_overrides} multifunctional process(es) switched from their "
+                f"openLCA default allocation method to a higher-priority valid "
+                f"method (PHYSICAL > ECONOMIC > CAUSAL)"
+            )
+        if n_burden_free:
+            parts.append(
+                f"{n_burden_free} process(es) use burden-free byproducts "
+                f"(one product gets factor 1.0, co-products get 0.0)"
+            )
+        log.info("Allocation validation: " + "; ".join(parts) + ".")
 
     return True
 
@@ -229,14 +246,6 @@ def get_allocation_factor(
 ### Exchange edit helpers ###
 #############################
 
-def scale_exchange_amount(exchange: Dict, factor: float) -> None:
-    """Scale exchange amount by allocation factor."""
-    exchange["amount"] = exchange.get("amount", 0.0) * factor
-
-def set_quantitative_reference(exchange: Dict) -> None:
-    """Mark an exchange as the quantitative reference."""
-    exchange["isQuantitativeReference"] = True
-
 def update_process_identity(process: Dict, product_exchange: Dict) -> None:
     """
     Update process name and UUID for product-specific copy.
@@ -253,19 +262,26 @@ def filter_and_scale_exchanges(
     allocation_factor: float
 ) -> List[Dict]:
     """
-    Keep only the target PRODUCT_FLOW exchange (as the quantitative reference)
-    and scale all non-product exchanges by the allocation factor.
+    Keep only the target PRODUCT_FLOW/WASTE_FLOW output (as quantitative
+    reference), drop other technosphere outputs, and scale remaining exchanges
+    by the allocation factor.
     """
     updated_exchanges = []
     for exc in exchanges:
-        if is_product_exchange(exc):
-            if exc.get("flow", {}).get("@id") == keep_product_flow_id:
-                set_quantitative_reference(exc)
+        flow_type = (exc.get("flow") or {}).get("flowType")
+        is_technosphere_output = (
+            not exc.get("isInput", False)
+            and not exc.get("avoidedProduct")
+            and flow_type in {"PRODUCT_FLOW", "WASTE_FLOW"}
+        )
+        if is_technosphere_output:
+            if (exc.get("flow") or {}).get("@id") == keep_product_flow_id:
+                exc["isQuantitativeReference"] = True
                 updated_exchanges.append(exc)
-            # Drop other product flows
-        else:
-            scale_exchange_amount(exc, allocation_factor)
-            updated_exchanges.append(exc)
+            # Drop other co-product / co-waste outputs
+            continue
+        exc["amount"] = exc.get("amount", 0.0) * allocation_factor
+        updated_exchanges.append(exc)
     return updated_exchanges
 
 #################################################
@@ -434,7 +450,62 @@ def split_multi_product_processes(importer):
     # Write the split processes back
     importer.data["processes"] = updated_processes
 
+    # Allocation already applied on split children; clear leftover AFs so
+    # Brightway's json_ld_allocate_datasets does not re-allocate after flow cloning.
+    for proc in updated_processes.values():
+        if proc.get("allocationFactors") and len(get_product_exchanges(proc)) <= 1:
+            proc.pop("allocationFactors", None)
+            proc["defaultAllocationMethod"] = "NO_ALLOCATION"
+
+    # Drop leftover waste/product co-outputs on mono-product processes so each
+    # activity has one technosphere production exchange (square matrix).
+    _drop_extra_technosphere_outputs(importer)
+
     # 3) Update defaultProvider references across the entire DB using 3-key matching
     update_default_providers_for_children(importer, all_child_mappings)
 
     return importer
+
+
+def _drop_extra_technosphere_outputs(importer) -> None:
+    """Keep only the quantitative-reference technosphere output per process."""
+    n_dropped = 0
+    for process in (importer.data.get("processes") or {}).values():
+        if process.get("type") in {"emission", "product"}:
+            continue
+        exchanges = process.get("exchanges") or []
+        outputs = [
+            exc
+            for exc in exchanges
+            if not exc.get("isInput", False)
+            and not exc.get("avoidedProduct")
+            and (exc.get("flow") or {}).get("flowType")
+            in {"PRODUCT_FLOW", "WASTE_FLOW"}
+        ]
+        if len(outputs) <= 1:
+            continue
+        qref = next(
+            (
+                exc
+                for exc in outputs
+                if exc.get("isQuantitativeReference")
+                or exc.get("quantitativeReference")
+            ),
+            None,
+        )
+        if qref is None:
+            products = [
+                exc
+                for exc in outputs
+                if (exc.get("flow") or {}).get("flowType") == "PRODUCT_FLOW"
+            ]
+            qref = products[0] if products else outputs[0]
+        drop_ids = {id(exc) for exc in outputs if exc is not qref}
+        before = len(exchanges)
+        process["exchanges"] = [exc for exc in exchanges if id(exc) not in drop_ids]
+        n_dropped += before - len(process["exchanges"])
+    if n_dropped:
+        log.info(
+            f"Dropped {n_dropped} leftover co-product/co-waste output(s) "
+            f"after disaggregation."
+        )

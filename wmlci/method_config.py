@@ -51,6 +51,32 @@ def load_method_config(method_name: str) -> dict[str, Any]:
         str(k): dict(v or {})
         for k, v in (config.get("process_parameter_overrides") or {}).items()
     }
+
+    # LCIA display / FEDEFL mapping defaults (method-agnostic; override in YAML)
+    method_tuple = config.get("lcia_method") or []
+    if isinstance(method_tuple, list):
+        default_label = " / ".join(str(p) for p in method_tuple) or method_name
+    else:
+        default_label = str(method_tuple) or method_name
+    config.setdefault("lcia_label", default_label)
+    config.setdefault("lcia_unit", "")
+    config.setdefault(
+        "fedelemflowlist_source",
+        config.get("lcia_db_name") or "IPCC",
+    )
+    groups = config.get("characterized_flow_groups")
+    if groups is None:
+        config["characterized_flow_groups"] = {}
+    elif not isinstance(groups, dict):
+        raise ValueError(
+            f"Method '{method_name}' characterized_flow_groups must be a mapping "
+            "of group label -> list of substrings"
+        )
+    else:
+        config["characterized_flow_groups"] = {
+            str(label): [str(s) for s in (patterns or [])]
+            for label, patterns in groups.items()
+        }
     return config
 
 

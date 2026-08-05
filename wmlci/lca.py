@@ -11,9 +11,13 @@ import bw2data as bd
 from wmlci.disaggregation import split_multi_product_processes
 from wmlci.editImporter import (
     convert_lcia_param_list_to_dict,
+    correct_jsonld_input_key,
     map_lcia_to_fedelemflowlist_UUIDs,
 )
-from wmlci.errorLogging import check_for_errors_in_jsonld_import
+from wmlci.errorLogging import (
+    check_for_errors_in_jsonld_import,
+    validate_jsonld_exchanges,
+)
 from wmlci.jsonld_loader import clean_JSONLD_sourceData, load_JSONLD_sourceData
 from wmlci.log import log
 from wmlci.method_config import load_method_config
@@ -23,6 +27,7 @@ from wmlci.openlca import (
     resolve_processes,
     write_lca_outputs,
 )
+from wmlci.technosphere_updates import update_technosphere_flows
 
 
 def run_bw_lca(method_name: str) -> dict[str, Any]:
@@ -32,7 +37,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     Parameters
     ----------
     method_name
-        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_pilot``).
+        Stem of a file in ``wmlci/methods/`` (e.g. ``v16``, ``wmlci_demo``).
 
     Returns
     -------
@@ -56,13 +61,23 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     )
     # split multi-product processes so the technosphere matrix is square
     jsonld = split_multi_product_processes(jsonld)
-    # check for errors in imported data - these checks do not fix the errors
-    check_for_errors_in_jsonld_import(jsonld)
     # apply common clean up procedures
     jsonld = clean_JSONLD_sourceData(jsonld, config)
-    # check for errors again
-    log.info("Checking errors are fixed")
+    # replace input providers using technosphere_updates YAML
+    jsonld = update_technosphere_flows(jsonld, config["processes"], config)
+    # diagnostics only — these checks do not fix errors
     check_for_errors_in_jsonld_import(jsonld)
+    # keep duplicative input/isInput keys because
+    # json_ld_allocate_datasets uses input, while json_ld_add_activity_unit uses isInput
+    jsonld = correct_jsonld_input_key(jsonld)
+    # FEDEFL + input-key fixes are done; report only remaining exchange issues
+    issues = validate_jsonld_exchanges(jsonld)
+    if issues:
+        log.warning("Validation found problems:")
+        for issue in issues:
+            log.warning(" - " + issue)
+    else:
+        log.info("Exchanges validated successfully.")
     # fix issues when openLCA and brightway have to talk by manipulating data sets
     jsonld.apply_strategies()
     # merge biosphere flows
@@ -87,7 +102,10 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
     # link to inventory by UUID
     jsonldlcia.apply_strategies()
     jsonldlcia = map_lcia_to_fedelemflowlist_UUIDs(
-        jsonldlcia, sourcelistname="IPCC"
+        jsonldlcia,
+        sourcelistname=config.get("fedelemflowlist_source")
+        or config.get("lcia_db_name")
+        or "IPCC",
     )
     jsonldlcia.match_biosphere_by_id(config["inventory_database"])
     # drop the CFs that do not match a flow
@@ -119,8 +137,10 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         f"Assessing {len(processes)} scenarios:\n" + "\n".join(scenario_lines)
     )
 
-    results_df, detail_df = calculate_lca_results(db, processes, config)
-    paths = write_lca_outputs(results_df, detail_df, config)
+    results_df, detail_df, characterized_df = calculate_lca_results(
+        db, processes, config
+    )
+    paths = write_lca_outputs(results_df, detail_df, characterized_df, config)
 
     print("\nLCA results (all scenarios):")
     print(results_df.to_string(index=False))
@@ -130,6 +150,7 @@ def run_bw_lca(method_name: str) -> dict[str, Any]:
         "config": config,
         "summary": results_df,
         "detail": detail_df,
+        "characterized_inventory": characterized_df,
         "paths": paths,
         "scenarios": [
             (a["name"], p["name"])

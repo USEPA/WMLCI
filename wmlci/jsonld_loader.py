@@ -7,11 +7,23 @@ import zipfile
 from bw2io.importers.json_ld import JSONLDImporter
 from bw2io.importers.json_ld_lcia import JSONLDLCIAImporter
 
-from wmlci.settings import extractpath, paths, source_data_path
+from wmlci.disaggregation import split_multi_product_processes
+from wmlci.editImporter import (
+    apply_carbon_storage_credit,
+    apply_opposite_direction_approach,
+    clone_shared_production_flows,
+    convert_param_list_to_dict,
+    map_to_fedelemflowlist_UUIDs,
+    recalculate_amounts_from_formulas,
+    remove_impact_free_objects,
+    remove_process_allocation_factors,
+    replace_exchange_locations,
+    replace_process_location,
+    reset_location_dict,
+)
 from wmlci.extract.extract_common import extract_source_data, jsonld_source_dir
 from wmlci.log import log
-from wmlci.editImporter import *
-from wmlci.errorLogging import *
+from wmlci.settings import extractpath, paths, source_data_path
 
 from esupy.remote import make_url_request
 from esupy.processed_data_mgmt import mkdir_if_missing
@@ -100,6 +112,43 @@ def clean_JSONLD_sourceData(jsonld, config):
     jsonld = remove_process_allocation_factors(jsonld)
     # Remove exchanges and processes with no impacts
     remove_impact_free_objects(jsonld)
+    # Convert parameters list to dictionary
+    jsonld = convert_param_list_to_dict(jsonld)
+
+    return jsonld
+
+
+def clean_JSONLD_background_data(jsonld):
+    """
+    Clean jsonld data that are used to replace exisiting process data.
+    Generally pulled from the Federal LCA Commons.
+
+    Used before copying replacement processes into the base inventory.
+    Does not map elementary flows to FEDEFL, as FLCAC data already uses
+    federal elementary flow UUIDs.
+
+    Multifunctional background processes are split with allocation
+    (``split_multi_product_processes``). Shared product UUIDs are then cloned
+    so the Brightway matrix stays square. Cross-dimension exchange units
+    (e.g. diesel in btu with mass refUnit) are normalized after merge into the
+    base inventory, where full unit_groups are available.
+
+    Keeps openLCA ``isInput`` through cleaning. Immediately before
+    ``apply_strategies()``, ``correct_jsonld_input_key`` syncs both ``isInput``
+    and ``input`` (Brightway strategies require different keys in one pass).
+    """
+    # Apply the Opposite Direction Approach for waste management
+    jsonld = apply_opposite_direction_approach(jsonld)
+    # Replace location dictionary with a single entry for the US
+    jsonld = reset_location_dict(jsonld)
+    # Set all process locations to US
+    jsonld = replace_process_location(jsonld)
+    # Set all exchange locations to US
+    jsonld = replace_exchange_locations(jsonld)
+    # One allocated child process per product (same as foreground)
+    jsonld = split_multi_product_processes(jsonld)
+    # One unique product UUID per producing process (square Brightway matrix)
+    jsonld = clone_shared_production_flows(jsonld)
     # Convert parameters list to dictionary
     jsonld = convert_param_list_to_dict(jsonld)
 
