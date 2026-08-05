@@ -1,9 +1,14 @@
-# Result documentation: v16 vs wmlci_pilot
+# Result documentation
 
-This page describes the comparison graphics for the LCA methods and explains why the scores differ.
+This page describes model result graphics for the LCA methods.
 Methods details are in [`method_and_data_documentation.md`](data_and_method_documentation).
 
-Differences in results between the two methods are due to:
+This document compare the GWP results for methods `v16` vs `wmlci_pilot`. 
+It also evaluates the results of the smog LCIA. 
+
+## GWP comparison: v16 vs wmlci_pilot
+
+Differences in GWP results between the two methods are due to:
 
 1) **Inventory updates** updated FLCAC data in the `wmlci_pilot` method
 2) **LCIA updates** `v16` is calculated using IPCC AR4-100, while `wmlci_pilot` is built on AR6-100
@@ -52,7 +57,9 @@ In every scenario, pilot has a **larger absolute** score: higher burdens for lan
 ## Top contributors
 
 We assessed the values of the top 5 contributors to each modeling scenario, ranked by the absolute values. 
-The remaining data, outside the top 5 contributors, are aggregated into a combined "Other" category and included in the graphics. 
+The remaining data, outside the top 5 contributors, are aggregated into a combined "Other" category and included in the graphics.
+A separate **Total** bar shows the full scenario score. 
+The Total value is the summed values of the other data included in the bar chart. 
 This way the graphics still include total emissions for each modeling scenario, but it is clear what is driving the results. 
 If there are fewer than 5 contributors shown, or no "Other" than all data is captured in the bars that are graphed.
 
@@ -62,7 +69,7 @@ If there are fewer than 5 contributors shown, or no "Other" than all data is cap
 
 ![Figure 3. Landfill top contributors](graphics/top_contributors_landfill_food_waste_v16_vs_wmlci_pilot.svg)
 
-- Per-model top activities by |contribution|, plus an “Other” residual for aggregated activities outside the top 5.
+- Per-model top activities by |contribution|, plus an “Other” residual for aggregated activities outside the top 5, and a **Total** bar (green) for the scenario score.
 - Activity names do not align 1:1 across models (provider swaps + disaggregation).
 
 Reasons for differences:
@@ -121,3 +128,42 @@ Reasons for differences:
    Updated virgin-displacement burdens (and recycled pathway burdens) do not cancel the same way as in Waste Reduction Model aggregates.
 3. **MSW truck transport dropped** in the recycling update YAML (collection treated as already in recycled FLCAC datasets) — small vs manufacturing, but intentional scope change.
 4. **AR6 factors** also rescale CH₄/N₂O portions of the credit (pilot shows a visible N₂O credit; v16 N₂O ~0 in the characterized rollup).
+
+---
+
+## Smog LCIA Results
+
+TRACI 2.2 smog formation results for the `wmlci_pilot_smog` method (same three scenarios; functional unit **1 US short ton**). There is no v16 comparison for this indicator.
+
+| Scenario | Smog (kg O₃ eq) |
+|----------|----------------:|
+| Landfill (food waste) |             1.5 |
+| Combustion (mixed plastics) |            −6.0 |
+| Recycling (mixed plastics) |           −56.8 |
+
+### Scenario smog scores
+
+**Figure 6.** Scenario smog formation scores (`wmlci_pilot_smog`).
+
+![Figure 6. Scenario smog scores](graphics/scenario_scores_wmlci_pilot_smog.svg)
+
+- Total smog formation (kg O₃ eq) for each scenario.
+- Positive = net ozone-formation burden; negative = net credit (combustion energy recovery and recycling material displacement).
+
+### Scenario smog by contributing flow
+
+**Figure 7.** Scenario smog by contributing flow (NOx / VOC / CO / CH₄ / Other), in kg O₃ eq.
+
+![Figure 7. Scenario smog by contributing flow](graphics/scenario_by_flow_wmlci_pilot_smog.svg)
+
+- Same scenario totals as Figure 6, split by precursor groups from `characterized_flow_groups` in [`wmlci_pilot_smog.yaml`](../wmlci/methods/wmlci_pilot_smog.yaml).
+- NOx dominates the recycling credit and most of the landfill burden; combustion shows a net credit driven largely by NOx (and NO₂) from avoided grid electricity.
+
+### Top contributors
+
+**Figure 8.** Top contributors by scenario (`wmlci_pilot_smog`).
+
+![Figure 8. Smog top contributors](graphics/top_contributors_wmlci_pilot_smog.svg)
+
+- One panel per scenario: top 5 activities by |contribution|, plus an “Other” residual for the long tail, and a **Total** bar (green) for the scenario score.
+- Activity names differ across scenarios (foreground waste process vs electricity generators vs plastics manufacturing).
