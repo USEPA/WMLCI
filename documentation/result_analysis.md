@@ -12,6 +12,7 @@ Differences in GWP results between the two methods are due to:
 
 1) **Inventory updates** updated Federal LCA Commons (FLCAC) data in the `wmlci_pilot` method
 2) **LCIA updates** `v16` is calculated using IPCC AR4-100 for GWP, while `wmlci_pilot` is built on AR6-100
+3) **Grid Decarbonization** Some of the changes in electricity are because the Waste Reduction Model v16 was released in 2022 and used an older egrid value than what is now used in `wmlci_pilot`
 
 Functional unit for all scenarios: **1 US short ton** (907.18474 kg).
 
@@ -38,8 +39,8 @@ In every scenario, pilot has a **larger absolute** score: higher burdens for lan
 - Grouped bars of total GWP for each scenario under `v16` vs `wmlci_pilot`.
 - Positive = net GHG burden; negative = net credit (typical of recycling with virgin material displacement and possible with energy recovery in landfill and combustion).
 - Values change across methods due to:
-  1. Updated GWP factors — AR4-100 vs AR6-100
-  2. Updated background providers — pilot replaces Waste Reduction Model v16 transport, electricity, landfill diesel, and plastics (virgin and recycled) manufacturing with FLCAC datasets (see method doc).
+  1. Updated GWP factors (AR4-100 vs AR6-100)
+  2. Updated background providers (FLCAC transport, electricity, landfill diesel, and plastics manufacturing (virgin and recycled)
 
 ---
 
@@ -72,18 +73,14 @@ If there are fewer than 5 contributors shown, or no "Other" than all data is cap
 - Per-model top activities by |contribution|, plus an “Other” residual for aggregated activities outside the top 5, and a **Total** bar (green) for the scenario score.
 - Activity names do not align 1:1 across models (provider swaps + disaggregation).
 
-Reasons for differences:
-
-1. **Foreground landfill process rises (~542 → ~619)**
-   Fugitive CH₄ is still the main contributor.
-   Characterized CH₄ inventory mass is ~26 kg in both runs; applying GWP 25 vs ~29.8 moves CH₄ from ~659 to ~734 kg CO₂e.
-   That alone accounts for most of the landfill change. This can be attributed to the higher GWP characterization factor for landfill methane when using AR6 instead of AR4.
-2. **Electricity credit shrinks**
-   v16 uses a single Waste Reduction Model process “Electricity generation, at grid, National” (−61).
-   Pilot swaps to FLCAC US electricity baseline, which appears as many regional/fuel activities (e.g. MISO coal, PJM gas) with a **much smaller net credit** on the top bars (−4 / −3) plus Other. This reflects using updated electricity data that takes into account recent grid decarbonization.
-3. **Diesel / transport providers renamed but similar magnitude**
-   “Landfill operation, diesel” → heavy-equipment diesel (~17 → ~18); MSW truck → USLCI short-haul (~3 in both).
-   These are not the main score drivers.
+Reasons for differences: 
+1. **Foreground landfill process increases**
+   Fugitive CH₄ remains the main contributor. Main driver to the increase is switch from AR4 GWP 25 to AR6 ~29.8. This accounts for most of the landfill change.
+2. **Electricity credit decreases (LFG energy recovery)**
+   v16 uses a single Waste Reduction Model process “Electricity generation, at grid, National”.
+   Switching to the FLCAC US electricity baseline has a lower carbon intensity.
+3. **Landfill operation equipment**
+   Increases slightly due to new FLCAC dataset.
 
 ---
 
@@ -95,17 +92,11 @@ Reasons for differences:
 
 - Stack CO₂ from PET/HDPE combustion vs avoided electricity from energy recovery (and minor transport).
 
-Reasons for differences:
-
+Reasons for differences: 
 1. **Direct combustion emissions are the same**
-   PET (~1,228) and HDPE (~1,110) match in both models — GWP 1 in both models.
-2. **Avoided electricity credit is much smaller in pilot**
-   v16: one national-grid credit **−1,088**.
-   Pilot: US electricity baseline disaggregated into many generators; top coal/gas bars are only tens of kg each, and even with “Other” (~−510) the **total electricity offset is substantially less** than −1,088.
-   Net effect: same stack CO₂, less credit → higher GWP (~1,262 → ~1,669). This reflects using updated electricity data that takes into account recent grid decarbonization.
-3. **Transport** remains small in v16 (+3 truck, +9 ash); in pilot those sit in the long tail (“Other”).
-
-Combustion differences are driven primarily by the electricity technosphere update, not by plastic combustion factors.
+   PET and HDPE match, due to the GWP = 1 in both models.
+2. **Avoided electricity from energy recovery decreases**
+   The FLCAC dataset used in `wmlci_pilot` for national-average electricity has a lower carbon intensity than the data in `v16`. 
 
 ---
 
@@ -119,14 +110,12 @@ Combustion differences are driven primarily by the electricity technosphere upda
 - v16 activities are Waste Reduction Model “process energy” / “product manufacturing” aggregates.
 - Pilot activities are FLCAC/USLCI unit processes (natural gas boilers, ethylene, refining, etc.).
 
-Reasons for differences:
-
-1. **Manufacturing provider swap**
-   Virgin and recycled PET/HDPE manufacturing are replaced with USLCI resin/pellet datasets.
-   Contribution charts therefore show chemical/energy supply chains instead of Waste Reduction Model process-energy buckets. In the latest FLCAC data there are lower impacts for PET recycling. Virgin HDPE impacts are also higher in the latest FLCAC data, which leads to greater credit. 
-2. **Net CO₂ credit increases** (−800 → −987 characterized)
-   Updated virgin-displacement burdens (and recycled pathway burdens) do not cancel the same way as in Waste Reduction Model aggregates.
-3**AR6 factors** also rescale CH₄/N₂O portions of the credit (pilot shows a visible N₂O credit; v16 N₂O ~0 in the characterized rollup).
+Reasons for differences: 
+1. **Manufacturing provider update to USLCI**
+   Virgin and recycled PET/HDPE manufacturing are replaced with USLCI resin/pellet datasets. PET recycling has lower impacts, and virgin HDPE has higher impacts—both of which increase the displacement credit.
+2. **Larger net CO₂ credit in pilot**
+3. **Update to AR6 GWP factors** 
+    Rescales CH₄/N₂O portions of the credit. 
 
 ---
 
@@ -141,7 +130,7 @@ There is no v16 comparison for this indicator, as the v16 Waste Reduction Model 
 | Combustion (mixed plastics) |            −7.5 |
 | Recycling (mixed plastics) |           −56.7 |
 
-Note that negative values are avoided-burden credits. 
+Note that negative values are avoided-burden credits, not physical pollutant removals. 
 Combustion credits displace grid electricity, while recycling credits displace virgin PET/HDPE manufacturing.
 
 ### Scenario smog scores
@@ -153,6 +142,9 @@ Combustion credits displace grid electricity, while recycling credits displace v
 - Total smog formation (kg O₃ eq) for each scenario.
 - Positive = net ozone-formation burden; negative = net credit (combustion energy recovery and recycling material displacement).
 
+Across these life-cycle results, smog is almost entirely nitrogen oxides. 
+Carbon monoxide, methane, and VOCs are in the inventory but are small shares of the characterized totals. 
+
 ### Scenario smog by contributing flow
 
 **Figure 7.** Scenario smog by contributing flow (NOx / VOC / CO / CH₄ / Other), in kg O₃ eq.
@@ -160,7 +152,7 @@ Combustion credits displace grid electricity, while recycling credits displace v
 ![Figure 7. Scenario smog by contributing flow](graphics/scenario_by_flow_wmlci_pilot_smog.svg)
 
 - Same scenario totals as Figure 6, split by precursor groups from `characterized_flow_groups` in [`wmlci_pilot_smog.yaml`](../wmlci/methods/wmlci_pilot_smog.yaml).
-- NOx dominates the recycling credit and most of the landfill burden; combustion shows a net credit driven largely by NOx (and NO₂) from avoided grid electricity.
+- NOx dominates all three scenarios. CO, CH₄, and VOCs appear on the chart but remain small relative to NOx.
 
 ### Top contributors
 
@@ -169,4 +161,7 @@ Combustion credits displace grid electricity, while recycling credits displace v
 ![Figure 8. Smog top contributors](graphics/top_contributors_wmlci_pilot_smog.svg)
 
 - One panel per scenario: top 5 activities by |contribution|, plus an “Other” residual for the long tail, and a **Total** bar (green) for the scenario impact.
-- Activity names differ across scenarios (foreground waste process vs electricity generators vs plastics manufacturing).
+- Activity names differ across scenarios (foreground waste process vs electricity generators vs plastics manufacturing). 
+
+Combustion has positive NOx emissions in the main MSW combustion stage, which influence the +14.9 kg O₃ eq on MSW combustion of mixed plastics before energy-recovery credits move the total to −7.5. 
+That split matters because smog is regional, with communities near the incinerator impacted by smog, while avoided electricity credits accrue where the utilities operate.
