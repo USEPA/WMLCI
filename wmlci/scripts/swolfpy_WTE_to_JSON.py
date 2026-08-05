@@ -1,61 +1,81 @@
-"""
-Build openLCA JSON-LD inventory objects from the SwolfPy WTE model
+# This script might have difficulty being run due to package requirement conflicts
+# between flcac_utils and swolfpy
+# The data output of this script has been uploaded to EPA's Data Commmons, so
+# this script does not need to be run
 
-Currently designed to extract data for "Mixed_Plastic", but can be updated for additional materials.
+# You can run this if you install an editable local version of flcac_utils
+# https://github.com/FLCAC-admin/flcac-utils
 
-Access all air emissions data - not just GHG
-"""
 
-from __future__ import annotations
-
-import subprocess
-import sys
+import requests as r
+import yaml
 from pathlib import Path
-from typing import Any
+import pandas as pd
+import numpy as np
+from esupy.location import read_iso_3166
+from esupy.util import make_uuid
+from flcac_utils.util import format_dqi_score
+import os
+from flcac_utils.util import generate_locations_from_exchange_df
+from flcac_utils.generate_processes import build_location_dict
+from flcac_utils.util import extract_actors_from_process_meta, \
+    extract_sources_from_process_meta, extract_dqsystems
+from flcac_utils.generate_processes import build_flow_dict, \
+        build_process_dict, validate_exchange_data
+from flcac_utils.util import assign_year_to_meta
+from flcac_utils.commons_api import get_single_object
+import copy
+import shutil
+import zipfile
+from pathlib import Path
+# %%
+
+# Directory containing this .py file
+PATH_PROJECT = Path(__name__).resolve().parent
+
+PATH_PROJECT = Path(__name__).parent.parent
+# Write under source_data/ (unzipped folder is the local artifact)
+OUTPUT_PATH = PATH_PROJECT / "wmlci/data/source_data"
+METHODS_PATH = PATH_PROJECT / "wmlci/methods"
+
+#with open(METHODS_PATH / "v16.yaml" , "r") as f:
+#    config = yaml.safe_load(f)
+# %%
+
 
 import pandas as pd
-from esupy.util import make_uuid
-
-# swoflpy_processmodels and flcac_utils are packages required to run this script, but are
-# not required for the rest of the package, so only install for this script
-try:
-    from flcac_utils.generate_processes import (
-        build_flow_dict,
-        build_process_dict,
-        write_objects,
-    )
-    from swolfpy_processmodels import WTE
-except ImportError:
-    subprocess.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "git+https://github.com/FLCAC-admin/flcac-utils.git#egg=flcac_utils",
-            "swolfpy_processmodels",
-        ]
-    )
-    from flcac_utils.generate_processes import (
-        build_flow_dict,
-        build_process_dict,
-        write_objects,
-    )
-    from swolfpy_processmodels import WTE
-
-# Directory containing wmlci package root
-PATH_PROJECT = Path(__file__).resolve().parent.parent
-OUTPUT_PATH = PATH_PROJECT / "data/source_data/swolfpy"
+from swolfpy_processmodels import WTE
 
 # --------------------------------------------------
 # Create and run model
 # --------------------------------------------------
 
-wte = WTE()
 
+wte = WTE()
+# %%
+
+
+print(dir(wte))
 print("Running WTE...")
+print(type(wte.InputData))
+print(wte.InputData.__dict__.keys())
+
+#check parameter default values
+print(wte.InputData.Material_Consumption["ammonia"]["amount"])
+print(wte.InputData.Material_Consumption["lime"]["amount"])
+print(wte.InputData.Material_Consumption["carbon"]["amount"])
+print(wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"])
+inputdata_table = wte.InputData.Material_Consumption
+
+# %%
+#change transport distance, with mi to km conversion
+#wte.InputData.Material_Consumption["Distance_from_prod_fac"]["amount"] = config['model_defaults']['transport']['distance_miles'] * 1.60934
+
+#run wte module-- this gets results, but we're extracting exchanges 
 wte.calc()
 print("Complete")
+
+# %%
 
 # --------------------------------------------------
 # Check available material names
@@ -106,7 +126,6 @@ apc = wte.APC_Consumption.loc[[material]]
 
 print("\n=== APC CONSUMPTION ===")
 print(apc.T)
-
 # --------------------------------------------------
 # Build reported inventory
 # --------------------------------------------------
@@ -114,11 +133,12 @@ combustion_emission_unmapped = wte.Combustion_Emission.copy()
 
 wte.report()
 
+# %%
 PROCESS_NAME = "Mixed Plastic WTE"
 PROCESS_CATEGORY = "SwolfPy / WTE"
 LOCATION = "US"
 
-rows: list[dict[str, Any]] = []
+rows = []
 
 schema = [
     "ProcessID",
@@ -137,7 +157,7 @@ schema = [
     "unit",
     "avoided_product",
     "exchange_dqi",
-    "location",
+    "location"
 ]
 # %% match uuids to flow names
 # ------------------------------------------------------------------
@@ -183,7 +203,7 @@ biosphere_uuid_by_name = {
 
 # UBW_crosswalk = UBW_crosswalk.drop_duplicates()
 
-# %% uuid lookup for flow map candidates
+# %% uuid lookup for flow map candidates 
 
 # uuid_lookup = dict(
 #     zip(
@@ -237,100 +257,36 @@ biosphere_uuid_by_name = {
 #     ]
 
 #     print(reported_matches)
+# %% flow map v1 manually assembled after using UBW crosswalk and fedefl to ID mapping candidates 
 
-# flow map v1 manually assembled after using UBW crosswalk and fedefl to ID mapping candidates
-# Values are (Flowable, FEDEFL UUID) or "no uuid matches".
-bios_to_fedefl_map: dict[str, tuple[str, str] | str] = {
-    "87883a4e-1e3e-4c9d-90c0-f1bea36f8014": (
-        "Ammonia",
-        "65b5d5dd-95b5-36b2-8cb0-7c5501ff1e32",
-    ),
-    "77927dac-dea3-429d-a434-d5a71d92c4f7": (
-        "Antimony",
-        "9de688f4-2302-3557-b50c-0f1d304977f4",
-    ),
-    "dc6dbdaa-9f13-43a8-8af5-6603688c6ad0": (
-        "Arsenic",
-        "2b16d0b5-4713-3bb8-be5b-905382f0e8a8",
-    ),
-    "7e246e3a-5cff-43fc-a8e6-02d191424559": (
-        "Barium",
-        "2c5aef1c-7cf7-30ee-8a87-ba4682327767",
-    ),
-    "1c5a7322-9261-4d59-a697-adde6c12de92": (
-        "Cadmium",
-        "d5a296be-7219-3921-a430-cff172ac7911",
-    ),
-    "349b29d1-3e58-4c66-98b9-9d1a076efd2e": (
-        "Carbon dioxide",
-        "b6f010fb-a764-3063-af2d-bcb8309a97b7",
-    ),
-    "eba59fd6-f37e-41dc-9ca3-c7ea22d602c7": "no uuid matches",
-    "ba2f3f82-c93a-47a5-822a-37ec97495275": (
-        "Carbon monoxide",
-        "187c525c-3715-388c-b303-a0671524a615",
-    ),
-    "e142b577-e934-4085-9a07-3983d4d92afb": (
-        "Chromium",
-        "98bd36e1-fbe4-32ee-ba78-3b6726917c9b",
-    ),
-    "ec8144d6-d123-43b1-9c17-a295422a0498": (
-        "Copper",
-        "b15117ec-3b8e-35de-bef2-00aec1b9636e",
-    ),
-    "20185046-64bb-4c09-a8e7-e8a9e144ca98": (
-        "Nitrous oxide",
-        "cfee0524-7ad6-300b-b050-6249135a2492",
-    ),
-    "082903e4-45d8-4078-94cb-736b15279277": (
-        "Chlorinated dioxins and furans -- 2,3,7,8 congeners only",
-        "16c208f1-371c-3e27-a0ca-ee18b01d862e",
-    ),
-    "f9abb851-8731-4c5b-b057-863996a1f94a": (
-        "Hydrocarbons",
-        "6a8ca31c-ede5-38b1-8c30-2d50fb499a55",
-    ),
-    "c941d6d0-a56c-4e6c-95de-ac685635218d": (
-        "Hydrochloric Acid",
-        "e2230ed6-8d5e-3315-8bc9-ce337d1283ce",
-    ),
-    "8e123669-94d3-41d8-9480-a79211fe7c43": (
-        "Lead",
-        "fe829136-3042-36e6-b4cb-7ff591e8db98",
-    ),
-    "71234253-b3a7-4dfe-b166-a484ad15bee7": (
-        "Mercury",
-        "e2c65e04-f613-33db-9a6e-4cb4577b0005",
-    ),
-    "b53d3744-3629-4219-be20-980865e54031": (
-        "Methane",
-        "aab83476-ec6c-3742-af85-15d320b7ce80",
-    ),
-    "a5506f4b-113f-4713-95c3-c819dde6e48b": (
-        "Nickel",
-        "50f56ea3-e292-3c09-89d2-74466af5f11e",
-    ),
-    "c1b91234-6f24-417b-8309-46111d09c457": (
-        "Nitrogen oxides",
-        "4382ba18-dd21-3837-80b2-94283ef5490e",
-    ),
-    "21e46cb8-6233-4c99-bac3-c41d2ab99498": (
-        "Particulate matter, ≤ 2.5μm",
-        "49a9c581-7c83-36b0-b1bd-455ea4c665a6",
-    ),
-    "454c61fd-c52b-4a04-9731-f141bb7b5264": (
-        "Selenium",
-        "b6db14bd-73e9-3f02-852a-e8b5e60bbc61",
-    ),
-    "fd7aa71c-508c-480d-81a6-8052aad92646": (
-        "Sulfur dioxide",
-        "f4973035-59f5-3bdc-b257-b274dcc04e0f",
-    ),
-    "5ce378a0-b48d-471c-977d-79681521efde": (
-        "Zinc",
-        "435bfa52-d2d3-3760-abf4-27de892972ac",
-    ),
+bios_to_fedefl_map = {
+    "87883a4e-1e3e-4c9d-90c0-f1bea36f8014": ('Ammonia', '65b5d5dd-95b5-36b2-8cb0-7c5501ff1e32'),
+    "77927dac-dea3-429d-a434-d5a71d92c4f7" : ('Antimony', '9de688f4-2302-3557-b50c-0f1d304977f4'),
+    "dc6dbdaa-9f13-43a8-8af5-6603688c6ad0" : ('Arsenic', '2b16d0b5-4713-3bb8-be5b-905382f0e8a8'),
+    "7e246e3a-5cff-43fc-a8e6-02d191424559" : ('Barium', '2c5aef1c-7cf7-30ee-8a87-ba4682327767'),
+    "1c5a7322-9261-4d59-a692-adde6c12de92" : ('Cadmium', 'd5a296be-7219-3921-a430-cff172ac7911'),
+    "349b29d1-3e58-4c66-98b9-9d1a076efd2e" : ('Carbon dioxide', 'b6f010fb-a764-3063-af2d-bcb8309a97b7'),
+    "eba59fd6-f37e-41dc-9ca3-c7ea22d602c7" : 'no uuid matches',
+    "ba2f3f82-c93a-47a5-822a-37ec97495275" : ('Carbon monoxide', '187c525c-3715-388c-b303-a0671524a615'),
+    "e142b577-e934-4085-9a07-3983d4d92afb" : ('Chromium', '98bd36e1-fbe4-32ee-ba78-3b6726917c9b'),
+    "ec8144d6-d123-43b1-9c17-a295422a0498" : ('Copper', 'b15117ec-3b8e-35de-bef2-00aec1b9636e'),
+    "20185046-64bb-4c09-a8e7-e8a9e144ca98" : ('Nitrous oxide', 'cfee0524-7ad6-300b-b050-6249135a2492'),
+    "082903e4-45d8-4078-94cb-736b15279277" : ('Chlorinated dioxins and furans -- 2,3,7,8 congeners only','16c208f1-371c-3e27-a0ca-ee18b01d862e'),
+    "f9abb851-8731-4c5b-b057-863996a1f94a" : ('Hydrocarbons', '6a8ca31c-ede5-38b1-8c30-2d50fb499a55'),
+    "c941d6d0-a56c-4e6c-95de-ac685635218d" : ('Hydrochloric Acid', 'e2230ed6-8d5e-3315-8bc9-ce337d1283ce'),
+    "8e123669-94d3-41d8-9480-a79211fe7c43" : ('Lead', 'fe829136-3042-36e6-b4cb-7ff591e8db98'),
+    "71234253-b3a7-4dfe-b166-a484ad15bee7" : ('Mercury', 'e2c65e04-f613-33db-9a6e-4cb4577b0005'),
+    "b53d3744-3629-4219-be20-980865e54031" : ('Methane','aab83476-ec6c-3742-af85-15d320b7ce80'),
+    "a5506f4b-113f-4713-95c3-c819dde6e48b" : ('Nickel', '50f56ea3-e292-3c09-89d2-74466af5f11e'),
+    "c1b91234-6f24-417b-8309-46111d09c457" : ('Nitrogen oxides', '4382ba18-dd21-3837-80b2-94283ef5490e'),
+    "21e46cb8-6233-4c99-bac3-c41d2ab99498" : ('Particulate matter, ≤ 2.5μm', '49a9c581-7c83-36b0-b1bd-455ea4c665a6'),
+    "454c61fd-c52b-4a04-9731-f141bb7b5264" : ('Selenium', 'b6db14bd-73e9-3f02-852a-e8b5e60bbc61'),
+    "fd7aa71c-508c-480d-81a6-8052aad92646" : ('Sulfur dioxide', 'f4973035-59f5-3bdc-b257-b274dcc04e0f'),
+    "5ce378a0-b48d-471c-977d-79681521efde" : ('Zinc', '435bfa52-d2d3-3760-abf4-27de892972ac'),
 }
+
+# %% 
+    
 
 # ------------------------------------------------------------------
 # Technosphere flows that should be inputs to the WTE process
@@ -346,15 +302,16 @@ technosphere_flows = {
     "Fe",
     "Bottom_Ash",
     "Unreacted_Ash",
-    "Fly_Ash",
+    "Fly_Ash"
 }
 
 
-def get_flow_uuid(flow_name: str, flow_uuid: str = "") -> str:
+def get_flow_uuid(flow_name, flow_uuid=""):
     """
     Preserve supplied UUIDs.
     Generate deterministic UUIDs for product, waste, and unmapped flows.
     """
+
     if flow_uuid not in [None, ""]:
         return flow_uuid
 
@@ -362,17 +319,17 @@ def get_flow_uuid(flow_name: str, flow_uuid: str = "") -> str:
 
 
 def add_exchange(
-    flow_name: str,
-    amount: float,
-    unit: str,
-    flow_type: str,
-    is_input: bool,
-    provider_name: str | None,
-    provider_uuid: str | None,
-    reference: bool = False,
-    flow_uuid: str = "",
-    context: str = PROCESS_CATEGORY,
-) -> None:
+    flow_name,
+    amount,
+    unit,
+    flow_type,
+    is_input,
+    provider_name,
+    provider_uuid,
+    reference=False,
+    flow_uuid="",
+    context=PROCESS_CATEGORY,
+):
     rows.append(
         {
             "ProcessID": "",
@@ -394,22 +351,25 @@ def add_exchange(
             "location": LOCATION,
         }
     )
+# %% mixed plastic input flow
 
 
 # ------------------------------------------------------------------
-# Reference flow
+# MSW input flow-- reference set to false is important for later steps
 # ------------------------------------------------------------------
 
 add_exchange(
     flow_name="Mixed Plastic",
-    amount=1000,
+    amount=907.185,
     unit="kg",
     flow_type="PRODUCT_FLOW",
     is_input=True,
-    provider_name="",
-    provider_uuid="",
-    reference=True,
+    provider_name='',
+    provider_uuid='',
+    reference=False,
 )
+
+# %% technosphere exchanges
 
 # ------------------------------------------------------------------
 # Technosphere exchanges
@@ -417,10 +377,10 @@ add_exchange(
 # Zero values are intentionally retained.
 # Only NaN values are skipped.
 tech_map = pd.read_excel(
-    PATH_PROJECT / "utils/flowmapping/SwolfPy_WTE_Tech_flow_map.xlsx"
+    PATH_PROJECT / "wmlci/utils/flowmapping/SwolfPy_WTE_Tech_flow_map.xlsx"
 )
 
-swolfpy_to_uslci: dict[str, dict[str, Any]] = {}
+swolfpy_to_uslci = {}
 
 # Row 0 = USLCI Flow
 # Row 1 = USLCI Flow UUID
@@ -432,6 +392,7 @@ provider_names = tech_map.iloc[2]
 provider_uuids = tech_map.iloc[3]
 
 for swolfpy_flow in tech_map.columns:
+
     if swolfpy_flow == "SwolfPy Flow":
         continue
 
@@ -453,6 +414,7 @@ for swolfpy_flow in tech_map.columns:
 
 
 for flow, amount in wte.WTE["Technosphere"][material].items():
+
     if pd.isna(amount):
         continue
 
@@ -473,6 +435,7 @@ for flow, amount in wte.WTE["Technosphere"][material].items():
     mapped = swolfpy_to_uslci.get(flow_name)
 
     if mapped is not None:
+
         add_exchange(
             flow_name=mapped["flow_name"],
             amount=amount,
@@ -484,7 +447,9 @@ for flow, amount in wte.WTE["Technosphere"][material].items():
             provider_uuid=mapped["provider_uuid"],
             context=PROCESS_CATEGORY,
         )
+
     else:
+
         print(f"No USLCI mapping found for {flow_name}; using generated UUID")
 
         add_exchange(
@@ -493,12 +458,14 @@ for flow, amount in wte.WTE["Technosphere"][material].items():
             unit=unit,
             flow_type="PRODUCT_FLOW",
             is_input=is_input,
-            provider_name="",
-            provider_uuid="",
+            provider_name='',
+            provider_uuid='',
             flow_uuid=make_uuid(flow_name),
             context=PROCESS_CATEGORY,
         )
-
+        
+# %% waste exchanges
+        
 # ------------------------------------------------------------------
 # Waste outputs
 # ------------------------------------------------------------------
@@ -525,6 +492,7 @@ for flow, amount in wte.WTE["Technosphere"][material].items():
 #     )
 
 for flow, amount in wte.WTE["Waste"][material].items():
+
     if pd.isna(amount):
         continue
 
@@ -538,6 +506,7 @@ for flow, amount in wte.WTE["Waste"][material].items():
     mapped = swolfpy_to_uslci.get(flow_name)
 
     if mapped is not None:
+
         add_exchange(
             flow_name=mapped["flow_name"],
             amount=amount,
@@ -549,7 +518,9 @@ for flow, amount in wte.WTE["Waste"][material].items():
             provider_uuid=mapped["provider_uuid"],
             context=PROCESS_CATEGORY,
         )
+
     else:
+
         print(f"No USLCI mapping found for {flow_name}; using generated UUID")
 
         add_exchange(
@@ -558,12 +529,11 @@ for flow, amount in wte.WTE["Waste"][material].items():
             unit=unit,
             flow_type="PRODUCT_FLOW",
             is_input=False,
-            provider_name="",
-            provider_uuid="",
+            provider_name='',
+            provider_uuid='',
             flow_uuid=make_uuid(flow_name),
             context=PROCESS_CATEGORY,
         )
-
 # ------------------------------------------------------------------
 # Biosphere exchanges
 # ------------------------------------------------------------------
@@ -575,6 +545,7 @@ for flow, amount in wte.WTE["Waste"][material].items():
 #   FlowUUID = SWOLF biosphere UUID
 
 for flow_name, flow_uuid in biosphere_uuid_by_name.items():
+
     # Skip flows that are not present in the source dataframe
     if flow_name not in combustion_emission_unmapped.columns:
         continue
@@ -606,11 +577,16 @@ for flow_name, flow_uuid in biosphere_uuid_by_name.items():
         unit="kg",
         flow_type="ELEMENTARY_FLOW",
         is_input=False,
-        provider_name="",
-        provider_uuid="",
+        provider_name='',
+        provider_uuid='',
         flow_uuid=mapped_uuid,
         context="emission/air",
     )
+
+
+
+# %% build df_olca
+
 
 # ------------------------------------------------------------------
 # Build OLCA inventory dataframe
@@ -624,13 +600,24 @@ for col in schema:
 
 df_olca = df_olca[schema]
 
-# Additional unit conversion
-exceptions = ["Ammonia", "Charcoal", "lime", "Transport", "Electricity", "Plastic"]
-pattern = "|".join(exceptions)
+# %% addtional unit conversion to kg/Mg basis
 
-mask = df_olca["FlowName"].str.contains(pattern, case=False, regex=True)
+exceptions = ['Ammonia','Granular','Quicklime','Transport','Electricity','Plastic']
+pattern = '|'.join(exceptions)
 
-df_olca.loc[~mask, "amount"] = df_olca.loc[~mask, "amount"] * 1000
+mask = df_olca['FlowName'].str.contains(pattern, case=False, regex=True)
+
+df_olca.loc[~mask, 'amount'] = df_olca.loc[~mask, 'amount'] * 1000
+
+
+# %% convert all exchanges down to 1 sh ton basis 
+
+ref_mask = df_olca['FlowName'].str.contains('Plastic', case=False, regex=False)
+df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1/ 1.10231)
+#df_olca.loc[~ref_mask, 'amount'] = df_olca.loc[~ref_mask, 'amount'] * (1000 / config['model_defaults']['functional_unit']['amount'])
+
+# %% assign uuids, plus extra checks
+
 
 # ------------------------------------------------------------------
 # Assign Process UUID
@@ -638,6 +625,7 @@ df_olca.loc[~mask, "amount"] = df_olca.loc[~mask, "amount"] * 1000
 
 process_uuid = make_uuid(PROCESS_NAME)
 df_olca["ProcessID"] = process_uuid
+
 
 # ------------------------------------------------------------------
 # Sanity checks
@@ -659,6 +647,7 @@ missing_uuids = df_olca[
 if len(missing_uuids) > 0:
     print("WARNING: Some flows are missing UUIDs:")
     print(missing_uuids[["FlowName", "FlowUUID"]])
+
 
 # ------------------------------------------------------------------
 # Optional review
@@ -685,9 +674,7 @@ print(
 )
 
 print(df_olca.groupby('IsInput')['amount'].sum())
-# %%
-
-
+# %% optional export
 
 # # ------------------------------------------------------------------
 # # Optional export
@@ -700,38 +687,201 @@ print(df_olca.groupby('IsInput')['amount'].sum())
 
 # print("\nExported mixed_plastic_wte_olca_inventory.csv")
 
+# %%parameter df 
+
+df_params = pd.DataFrame({"formula": ['',
+                                      '',
+                                      '',
+                                      '',
+                                      '',
+                                      '(ammonia*transport_distance_combustion+lime*transport_distance_combustion+carbon*transport_distance_combustion)*Mg_to_shtn',
+                                      '(3*emptyReturn/23)*Mg_to_shtn',
+                                      ''],
+                          
+                         "isInputParameter": ['True',
+                                              'True',
+                                              'True',
+                                              'True',
+                                              'True',
+                                              'False',
+                                              'False',
+                                              'True'],
+                         "name": ['ammonia',
+                                  'lime',
+                                  'transport_distance_combustion',
+                                  'carbon',
+                                  'emptyReturn',
+                                  'transport_tkm',
+                                  'backhaul_tkm',
+                                  'Mg_to_shtn'],
+                         "value":[0.0004,
+                                  0.012,
+                                  100,
+                                  0.0006,
+                                  1,
+                                  '',
+                                  '',
+                                  0.907185],
+                         "description": ['Mg ammonia/Mg MSW',
+                                         'Mg lime/ Mg MSW',
+                                         'User-defined transport distance',
+                                         'Mg carbon/ Mg MSW',
+                                         'Backhaul toggle (0 = no backhaul, 1 = backhaul)',
+                                         'Calculated transport exchange amount in t*km',
+                                         'Calculated backhaul exchange amount in t*km. 23 is the heavy duty truck payload.',
+                                         'Conversion factor, Mg to short ton'],
+                         "processName":['Mixed Plastic WTE',
+                                        'Mixed Plastic WTE','Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE',
+                                        'Mixed Plastic WTE']})
+
+
+# %%
+
+def assign_formulas(df, flow_name, formula1, formula2):
+    mask = df["FlowName"].str.contains(
+        flow_name,
+        case=False,
+        regex=False,
+        na=False
+    )
+
+    idx = df.index[mask]
+
+    if len(idx) >= 2:
+        df.loc[idx[0], "amountFormula"] = formula1
+        df.loc[idx[1], "amountFormula"] = formula2
+
+    return df
+
+df_test = assign_formulas(
+    df_olca,
+    "Transport",
+    "transport_tkm",
+    "backhaul_tkm"
+)
 # %%
 
 # validate_exchange_data(df_olca)
 flows, new_flows = build_flow_dict(df_olca)
 
-meta: dict[str, Any] = {}
-location_objs: dict[str, Any] = {}
-source_objs: dict[str, Any] = {}
-actor_objs: dict[str, Any] = {}
-dq_objs: dict[str, Any] = {}
-# flcac_utils expects a DataFrame with processName
-df_params = pd.DataFrame(columns=["processName"])
+# %% build_process_dict
+
+meta={}
+location_objs = {}
+source_objs={}
+actor_objs={}
+dq_objs={}
 
 id_to_name = df_olca.set_index("ProcessName")["ProcessID"].to_dict()
-processes: dict[str, Any] = {}
+processes = {}
 
 for process_name in id_to_name.keys():
+
     # Filter rows where 'ProcessName' matches 'process_name'
-    filtered_df = df_olca[df_olca["ProcessName"] == process_name]
+    filtered_df = df_olca[df_olca['ProcessName'] == process_name]
     p_dict = build_process_dict(
         filtered_df,
         flows,
-        meta=meta,
-        location_objs=location_objs,
-        source_objs=source_objs,
-        actor_objs=actor_objs,
-        dq_objs=dq_objs,
-        df_params=df_params,
+        meta={},
+        location_objs = {},
+        source_objs={},
+        actor_objs={},
+        dq_objs={}, df_params=df_params
     )
     processes.update(p_dict)
 
-# write everything
+# Embed flowType on exchange.flow stubs (needed by remove_impact_free_objects)
+for _proc in processes.values():
+    for _ex in (_proc.exchanges or []):
+        if _ex.flow is None:
+            continue
+        if getattr(_ex.flow, "flow_type", None) is not None:
+            continue
+        _fid = getattr(_ex.flow, "id", None)
+        if _fid in flows and getattr(flows[_fid], "flow_type", None) is not None:
+            _ex.flow.flow_type = flows[_fid].flow_type
+# %%
+import olca_schema as olca
+import olca_schema.zipio as zipio #for writing to json
+from datetime import datetime, time
+
+outPath = Path.cwd() / 'output'
+
+def _write_obj(
+        file: str,
+        obj: dict,
+        path: Path = outPath
+        ):
+    """Creates a zip json from dictionary of olca obj e.g. file = 'json.zip'"""
+    with zipio.ZipWriter(path / file) as W:
+        for x in obj.values():
+            if x.last_change is None:
+                x.last_change = (datetime.combine(
+                    datetime.utcnow().date(), time(12)).isoformat() + 'Z')
+            if x.version is None:
+                x.version = '00.00.001'
+            W.write(x)
+
+# %%
+
+def write_objects(name: str,
+                  flows: dict[str, olca.Flow],
+                  new_flows_to_write: list,
+                  processes: dict[str, olca.Process],
+                  *args,
+                  out_path=outPath
+                  ):
+    """
+    Writes a collection of objects to json-ld to the out_path
+
+    :param name: str, stub for json-ld filename
+    :param flows: dict[UUID, olca.Flow]
+    :param new_flows_to_write: list of UUIDs found within flows
+    :param processes: dict[UUID, olc.Process]
+    :args:
+        additional dictionaries of olca objects where values are objects
+        for writing to json-ld e.g., Sources, Actors, etc.
+    """
+    ## Attempt to retrieve FEDEFL so that UUIDs of exchange flows can be assessed for
+    ## whether they exist in the FEDEFL.
+    try:
+        import fedelemflowlist
+        fl = fedelemflowlist.get_flows()
+    except (ImportError, AttributeError):
+        print("FEDEFL not available, UUIDs will not be checked")
+        fl = None
+
+    # generate flow lists to write
+    flowlist = fl.query('`Flow UUID` in @flows.keys()')
+    t_flowlist = {k: v for k, v in flows.items() if k in new_flows_to_write}
+    
+    # Write JSON -- IMPORT into database with **Units and Flow Properties**
+    # Select "Update data sets with newer versions" to replace any created flows
+    # and processes, but not any exisiting technosphere flows
+    
+    timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
+    #json_file = f'{name}_olca2.0_{timestr}.zip'
+    json_file = f'{name}.zip'
+    # Remove existing json (otherwise it gets extended)
+    (out_path / json_file).unlink(missing_ok=True)
+    # Create output folder if it doesn't exist
+    out_path.mkdir(parents=True, exist_ok=True)
+    print(f"Writing json to {out_path/json_file}")
+    # write flows directly from flow list based on those found in processes
+    fedelemflowlist.write_jsonld(flowlist, path=out_path / json_file)
+    # write tech flows
+    _write_obj(file=json_file, obj=t_flowlist, path=out_path)
+    # write processes
+    _write_obj(file=json_file, obj=processes, path=out_path)
+    # write additional objects as needed
+    for a in args:
+        _write_obj(file=json_file, obj=a, path=out_path)
+
+# %% write everything
 
 write_objects(
     "SwolfPy_WTE_PW_JSON",
@@ -744,3 +894,14 @@ write_objects(
     actor_objs,
     out_path=OUTPUT_PATH,
 )
+
+# flcac write_objects builds a zip; also unzip to folder for local load
+_zip_path = OUTPUT_PATH / "SwolfPy_WTE_PW_JSON.zip"
+_folder = OUTPUT_PATH / "SwolfPy_WTE_PW_JSON"
+if _folder.exists():
+    shutil.rmtree(_folder)
+_folder.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(_zip_path, "r") as _zf:
+    _zf.extractall(_folder)
+print(f"Wrote JSON-LD folder {_folder}")
+

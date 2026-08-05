@@ -18,6 +18,7 @@ from wmlci.method_config import load_method_config
 from wmlci.settings import find_versioned_file, resultspath
 
 OTHER_LABEL = "Other"
+TOTAL_LABEL = "Total"
 
 # Okabe–Ito subset (light orange for second model)
 _BLUE = "#0072B2"
@@ -28,10 +29,14 @@ _YELLOW = "#E69F00"
 _SKY = "#56B4E9"
 _MODEL_COLORS = [_BLUE, _ORANGE]
 _FLOW_PALETTE = [_BLUE, _ORANGE, _GREEN, _PURPLE, _YELLOW, _SKY]
+_TOTAL_COLOR = _GREEN
 _KNOWN_FLOW_COLORS = {
     "CO2": _BLUE,
     "CH4": _ORANGE,
     "N2O": _GREEN,
+    "NOx": _BLUE,
+    "VOC": _ORANGE,
+    "CO": _YELLOW,
     OTHER_LABEL: _PURPLE,
 }
 
@@ -162,7 +167,7 @@ def _annotate_bars(ax, *, horizontal: bool = False):
             span = abs(ax.get_xlim()[1] - ax.get_xlim()[0])
             x = val + (0.015 * span if val >= 0 else -0.015 * span)
             ax.annotate(
-                f"{val:.0f}",
+                f"{val:.1f}",
                 (x, y),
                 ha="left" if val >= 0 else "right",
                 va="center",
@@ -177,13 +182,47 @@ def _annotate_bars(ax, *, horizontal: bool = False):
             span = abs(ax.get_ylim()[1] - ax.get_ylim()[0])
             y = val + (0.02 * span if val >= 0 else -0.02 * span)
             ax.annotate(
-                f"{val:.0f}",
+                f"{val:.1f}",
                 (x, y),
                 ha="center",
                 va="bottom" if val >= 0 else "top",
                 fontsize=8,
                 color="0.15",
             )
+
+
+def _draw_scenario_category_dividers(ax, n_scenarios: int):
+    """Solid vertical lines between categorical scenario groups on the x-axis."""
+    if n_scenarios < 2:
+        return
+    for i in range(n_scenarios - 1):
+        ax.axvline(
+            i + 0.5,
+            color="0.25",
+            linewidth=1.25,
+            linestyle="-",
+            zorder=1,
+        )
+
+
+def _draw_panel_dividers(fig, axes):
+    """Solid horizontal rules between stacked subplot panels."""
+    axes = list(axes)
+    if len(axes) < 2:
+        return
+    fig.canvas.draw()
+    for ax in axes[:-1]:
+        bbox = ax.get_position()
+        fig.add_artist(
+            plt.Line2D(
+                [bbox.x0, bbox.x1],
+                [bbox.y0, bbox.y0],
+                transform=fig.transFigure,
+                color="0.25",
+                linewidth=1.5,
+                solid_capstyle="butt",
+            )
+        )
 
 
 def plot_scenario_scores(
@@ -209,9 +248,9 @@ def plot_scenario_scores(
     plot_df = pd.concat(frames, ignore_index=True)
     unit = units.pop() if len(units) == 1 else "impact"
     title = (
-        f"Scenario {_impact_label(_as_results(methods[0]))} scores"
+        f"Scenario {_impact_label(_as_results(methods[0]))}"
         if len(set(labels)) == 1
-        else "Scenario impact scores"
+        else "Scenario impacts"
     )
 
     sns.set_style("whitegrid")
@@ -222,20 +261,118 @@ def plot_scenario_scores(
         y="score",
         hue="model",
         palette=_MODEL_COLORS[: plot_df["model"].nunique()],
+        saturation=1,
         ax=ax,
     )
-    ax.set_ylabel(f"Score ({unit})")
+    ax.set_ylabel(f"Impact ({unit})")
     ax.set_xlabel("")
     ax.set_title(title)
     ax.axhline(0, color="0.4", linewidth=0.8)
     ax.tick_params(axis="x", labelrotation=15)
-    ax.legend(title="Model")
+    if plot_df["model"].nunique() > 1:
+        ax.legend(title="Model")
+    else:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
     ymin, ymax = ax.get_ylim()
     pad = (ymax - ymin) * 0.12
     ax.set_ylim(ymin - pad if ymin < 0 else ymin, ymax + pad)
+    _draw_scenario_category_dividers(ax, plot_df["scenario"].nunique())
     _annotate_bars(ax)
     fig.tight_layout()
     return _save(fig, savepath)
+
+
+def _top_contributor_panel_data(
+    detail: pd.DataFrame,
+    process: str,
+    *,
+    top_n: int,
+    wrap: int = 55,
+) -> pd.DataFrame:
+    """Top ``top_n`` activities by |FlowAmount|, Other residual, and Total."""
+    g = detail.loc[detail["process"] == process]
+    if g.empty:
+        return pd.DataFrame(columns=["activity", "activity_label", "FlowAmount"])
+    total_amount = float(g["FlowAmount"].sum())
+    g = g.sort_values("FlowAmount", key=lambda s: s.abs(), ascending=False)
+    top = g.head(top_n)[["activity", "FlowAmount"]].sort_values(
+        "FlowAmount", ascending=False
+    )
+    rest = g.iloc[top_n:]
+    parts = [top]
+    if len(rest):
+        parts.append(
+            pd.DataFrame(
+                [
+                    {
+                        "activity": OTHER_LABEL,
+                        "FlowAmount": rest["FlowAmount"].sum(),
+                    }
+                ]
+            )
+        )
+    parts.append(
+        pd.DataFrame([{"activity": TOTAL_LABEL, "FlowAmount": total_amount}])
+    )
+    out = pd.concat(parts, ignore_index=True)
+    out["activity_label"] = out["activity"].map(
+        lambda s: "\n".join(textwrap.wrap(str(s), width=wrap)) or str(s)
+    )
+    return out
+
+
+def _draw_contributor_panel(
+    ax,
+    data: pd.DataFrame,
+    *,
+    title: str,
+    color: str,
+    unit: str,
+    total_color: str = _TOTAL_COLOR,
+):
+    """Horizontal contributor bars; Total uses ``total_color``."""
+    if data.empty:
+        ax.set_title(title)
+        ax.text(
+            0.5,
+            0.5,
+            "No detail results",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.set_xlabel(f"Contribution ({unit})")
+        return
+    palette = {
+        row.activity_label: (
+            total_color if row.activity == TOTAL_LABEL else color
+        )
+        for row in data.itertuples(index=False)
+    }
+    sns.barplot(
+        data=data,
+        y="activity_label",
+        x="FlowAmount",
+        hue="activity_label",
+        palette=palette,
+        saturation=1,
+        dodge=False,
+        legend=False,
+        ax=ax,
+        order=data["activity_label"].tolist(),
+        orient="h",
+    )
+    ax.axvline(0, color="0.4", linewidth=0.8)
+    ax.set_xlabel(f"Contribution ({unit})")
+    ax.set_ylabel("")
+    ax.set_title(title)
+    ax.tick_params(axis="y", labelsize=8)
+    xmin, xmax = ax.get_xlim()
+    pad = (xmax - xmin) * 0.14 if xmax != xmin else 1.0
+    ax.set_xlim(xmin - pad if xmin < 0 else xmin, xmax + pad)
+    _annotate_bars(ax, horizontal=True)
 
 
 def plot_top_contributors(
@@ -250,41 +387,24 @@ def plot_top_contributors(
     Two-panel horizontal bar chart: method_a on top, method_b below.
 
     Each panel shows that method's top ``top_n`` activities by |FlowAmount|
-    (drawn high→low by signed value) plus an Other residual bar.
+    (drawn high→low by signed value), an Other residual bar, and a Total bar.
     """
     a = _as_results(method_a)
     b = _as_results(method_b)
 
-    def _panel_data(detail: pd.DataFrame) -> pd.DataFrame:
-        g = detail.loc[detail["process"] == process]
-        if g.empty:
-            return pd.DataFrame(columns=["activity_label", "FlowAmount"])
-        g = g.sort_values("FlowAmount", key=lambda s: s.abs(), ascending=False)
-        top = g.head(top_n)[["activity", "FlowAmount"]].sort_values(
-            "FlowAmount", ascending=False
-        )
-        rest = g.iloc[top_n:]
-        parts = [top]
-        if len(rest):
-            parts.append(
-                pd.DataFrame(
-                    [
-                        {
-                            "activity": OTHER_LABEL,
-                            "FlowAmount": rest["FlowAmount"].sum(),
-                        }
-                    ]
-                )
-            )
-        out = pd.concat(parts, ignore_index=True)
-        out["activity_label"] = out["activity"].map(
-            lambda s: "\n".join(textwrap.wrap(str(s), width=55)) or str(s)
-        )
-        return out
-
     panels = [
-        (_panel_data(a["detail"]), a["method_name"], _BLUE, _score_unit(a)),
-        (_panel_data(b["detail"]), b["method_name"], _ORANGE, _score_unit(b)),
+        (
+            _top_contributor_panel_data(a["detail"], process, top_n=top_n),
+            a["method_name"],
+            _BLUE,
+            _score_unit(a),
+        ),
+        (
+            _top_contributor_panel_data(b["detail"], process, top_n=top_n),
+            b["method_name"],
+            _ORANGE,
+            _score_unit(b),
+        ),
     ]
     if all(data.empty for data, _, _, _ in panels):
         raise ValueError(f"No detail rows for process: {process}")
@@ -292,47 +412,75 @@ def plot_top_contributors(
     sns.set_style("whitegrid")
     fig, axes = plt.subplots(2, 1, figsize=(14, 9), sharex=False)
     for ax, (data, name, color, unit) in zip(axes, panels):
-        if data.empty:
-            ax.set_title(name)
-            ax.text(
-                0.5,
-                0.5,
-                "No detail results",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.set_xlabel(f"Contribution ({unit})")
-            continue
-        sns.barplot(
-            data=data,
-            y="activity_label",
-            x="FlowAmount",
-            color=color,
-            ax=ax,
-            order=data["activity_label"].tolist(),
-            orient="h",
-        )
-        ax.axvline(0, color="0.4", linewidth=0.8)
-        ax.set_xlabel(f"Contribution ({unit})")
-        ax.set_ylabel("")
-        ax.set_title(name)
-        ax.tick_params(axis="y", labelsize=8)
-        xmin, xmax = ax.get_xlim()
-        pad = (xmax - xmin) * 0.14 if xmax != xmin else 1.0
-        ax.set_xlim(xmin - pad if xmin < 0 else xmin, xmax + pad)
-        _annotate_bars(ax, horizontal=True)
+        _draw_contributor_panel(ax, data, title=name, color=color, unit=unit)
 
     fig.suptitle(short_process(process), fontsize=13, fontweight="bold", y=0.98)
     fig.text(
         0.5,
         0.935,
-        f'Top {top_n} contributors + aggregated "other"',
+        f'Top {top_n} contributors + aggregated "other" + total',
         ha="center",
         va="top",
         fontsize=10,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.91))
+    _draw_panel_dividers(fig, axes)
+    return _save(fig, savepath)
+
+
+def plot_top_contributors_all_scenarios(
+    method: str | dict[str, Any],
+    *,
+    top_n: int = 5,
+    savepath: str | Path | None = None,
+):
+    """
+    One figure with a panel per scenario: top ``top_n`` activities + Other + Total.
+
+    Intended for single-method result sets (no model comparison).
+    """
+    res = _as_results(method)
+    detail = res["detail"]
+    processes = list(dict.fromkeys(res["summary"]["process"].tolist()))
+    if not processes:
+        raise ValueError(f"No scenarios in summary for '{res['method_name']}'")
+
+    unit = _score_unit(res)
+    impact = _impact_label(res)
+    n = len(processes)
+    sns.set_style("whitegrid")
+    fig, axes = plt.subplots(n, 1, figsize=(14, 3.6 * n), sharex=False)
+    if n == 1:
+        axes = [axes]
+
+    for ax, process in zip(axes, processes):
+        data = _top_contributor_panel_data(
+            detail, process, top_n=top_n, wrap=50
+        )
+        _draw_contributor_panel(
+            ax,
+            data,
+            title=short_process(process),
+            color=_BLUE,
+            unit=unit,
+        )
+
+    fig.suptitle(
+        f"{res['method_name']}: top contributors by scenario",
+        fontsize=13,
+        fontweight="bold",
+        y=0.995,
+    )
+    fig.text(
+        0.5,
+        0.965,
+        f'{impact} — top {top_n} activities + aggregated "other" + total',
+        ha="center",
+        va="top",
+        fontsize=10,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    _draw_panel_dividers(fig, axes)
     return _save(fig, savepath)
 
 
@@ -479,6 +627,7 @@ def plot_scenario_by_flow(
             hue="flow_group",
             hue_order=present,
             palette={k: palette[k] for k in present},
+            saturation=1,
             ax=ax,
             order=scenarios,
         )
@@ -491,6 +640,7 @@ def plot_scenario_by_flow(
         ymin, ymax = ax.get_ylim()
         pad = (ymax - ymin) * 0.12 if ymax != ymin else 1.0
         ax.set_ylim(ymin - pad if ymin < 0 else ymin, ymax + pad)
+        _draw_scenario_category_dividers(ax, len(scenarios))
         _annotate_bars(ax)
         ax.legend(title="Flow", loc="best")
 

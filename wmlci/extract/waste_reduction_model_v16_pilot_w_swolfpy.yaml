@@ -1,0 +1,15 @@
+# Waste Reduction Model v16 pilot + SwolfPy WTE JSON-LD
+
+author: WMLCI
+source_name: Waste Reduction Model v16 pilot with SwolfPy WTE
+source_url: EPA Data Commons WMLCI/sourceData/SwolfPy_WTE_PW_JSON.zip
+format: json-ld
+
+# Pilot inventory
+base_source: waste_reduction_model_v16_pilot
+
+# SwolfPy WTE JSON-LD zip on Data Commons
+swolfpy_source: SwolfPy_WTE_PW_JSON
+
+# Derive integrated inventory from those sources
+script_function: !script_function:integrate_swolfpy_data make_pilot_w_swolfpy
