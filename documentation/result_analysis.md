@@ -1,7 +1,7 @@
 # Result documentation
 
 This page describes model result graphics for the LCA methods.
-Methods details are in [`data_and_method_documentation.md`](data_and_method_documentation.md).
+Methods details are in [`data_and_methods.md`](data_and_methods.md).
 
 This document compares the Global Warming Potential (GWP) results for methods `v16` vs `wmlci_pilot`. 
 It also evaluates the results of the smog LCIA. 
