@@ -55,7 +55,6 @@ processes:
   "MSW combustion of Mixed Plastics":
     technosphere_updates: msw_combustion_mixed_plastics_w_air_emissions
   "MSW recycling of Mixed Plastics":
-  # TODO: determine if FLCAC datasets appear to stop at plant. WARM includes transport of manufactured products, to retailer.
     technosphere_updates: msw_recycling_mixed_plastics
 
 output_files:

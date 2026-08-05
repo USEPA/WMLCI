@@ -482,7 +482,7 @@ def check_for_errors_in_jsonld_import(jsonld):
     :param jsonld:
     :return:
     """
-    find_missing_unit_group_id(jsonld)  # todo: confirm working as intended
+    find_missing_unit_group_id(jsonld)
     find_production_exchange_errors(jsonld)
     find_location_issues(jsonld)
     find_faulty_allocation_factors(jsonld)
